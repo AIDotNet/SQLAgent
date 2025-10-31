@@ -9,17 +9,14 @@ using SQLBox.Infrastructure;
 
 namespace SQLBox.Infrastructure.Defaults;
 
-public sealed class GenericSqlExecutorSandbox : IExecutorSandbox
+public sealed class GenericSqlExecutorSandbox(IDbConnectionFactory factory) : IExecutorSandbox
 {
-    private readonly IDbConnectionFactory _factory;
-    public GenericSqlExecutorSandbox(IDbConnectionFactory factory) => _factory = factory;
-
     public async Task<string?> ExplainAsync(string sql, string dialect, CancellationToken ct = default)
     {
         if (!Regex.IsMatch(sql.TrimStart(), @"^(?is)(explain\s+)?select\b"))
             throw new InvalidOperationException("ExecutorSandbox only supports SELECT/EXPLAIN SELECT.");
 
-        await using var conn = _factory.CreateConnection();
+        await using var conn = factory.CreateConnection();
         await conn.OpenAsync(ct);
 
         var d = (dialect ?? string.Empty).ToLowerInvariant();

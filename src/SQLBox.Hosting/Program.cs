@@ -6,8 +6,11 @@ using SQLBox.Facade;
 using SQLBox.Hosting.Dto;
 using SQLBox.Infrastructure;
 using SQLBox.Infrastructure.Defaults;
+using Microsoft.Extensions.DependencyInjection;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddServiceDefaults();
 
 // Add services to the container
 builder.Services.AddOpenApi();
@@ -25,6 +28,11 @@ builder.Services.AddCors(options =>
 builder.Services.AddSingleton<IDatabaseConnectionManager, InMemoryDatabaseConnectionManager>();
 
 var app = builder.Build();
+
+app.MapDefaultEndpoints();
+
+// Wire SqlGen engine to use the same connection manager instance
+SqlGen.Configure(b => b.WithConnectionManager(app.Services.GetRequiredService<IDatabaseConnectionManager>()));
 
 // Configure the HTTP request pipeline
 if (app.Environment.IsDevelopment())

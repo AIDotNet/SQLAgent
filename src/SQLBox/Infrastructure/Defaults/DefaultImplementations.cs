@@ -16,10 +16,9 @@ public sealed class DefaultInputNormalizer : IInputNormalizer
         => Task.FromResult(question.Trim());
 }
 
-public sealed class InMemorySchemaProvider : ISchemaProvider
+public sealed class InMemorySchemaProvider(DatabaseSchema schema) : ISchemaProvider
 {
-    private readonly DatabaseSchema _schema;
-    public InMemorySchemaProvider(DatabaseSchema schema) { _schema = schema; }
+    private readonly DatabaseSchema _schema = schema;
     public Task<DatabaseSchema> LoadAsync(CancellationToken ct = default) => Task.FromResult(_schema);
 }
 

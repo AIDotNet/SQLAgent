@@ -11,20 +11,13 @@ using SQLBox.Infrastructure;
 namespace SQLBox.Hosting.Services;
 
 [MiniApi(Route = "/api/chat")]
-public class ChatService
+public class ChatService(IDatabaseConnectionManager connectionManager)
 {
-    private readonly IDatabaseConnectionManager _connectionManager;
-
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         WriteIndented = false
     };
-
-    public ChatService(IDatabaseConnectionManager connectionManager)
-    {
-        _connectionManager = connectionManager;
-    }
 
     /// <summary>
     /// SSE流式对话接口
@@ -42,7 +35,7 @@ public class ChatService
         try
         {
             // 验证连接
-            var connection = await _connectionManager.GetConnectionAsync(input.ConnectionId);
+            var connection = await connectionManager.GetConnectionAsync(input.ConnectionId);
             if (connection == null)
             {
                 await SendErrorAsync(context, "CONNECTION_NOT_FOUND",

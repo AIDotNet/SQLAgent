@@ -15,7 +15,7 @@ export default function ChatPage() {
   if (connections.length === 0) {
     return (
       <AppLayout>
-        <div className="container mx-auto py-8 px-4">
+        <div className="py-2">
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>未找到数据库连接</AlertTitle>
@@ -38,7 +38,7 @@ export default function ChatPage() {
   if (!currentConnection) {
     return (
       <AppLayout>
-        <div className="container mx-auto py-8 px-4">
+        <div className="py-2">
           <Alert>
             <Database className="h-4 w-4" />
             <AlertTitle>请选择数据库连接</AlertTitle>
@@ -58,7 +58,7 @@ export default function ChatPage() {
 
   return (
     <AppLayout>
-      <div className="h-[calc(100vh-64px)]">
+      <div className="flex-1 min-h-0 flex flex-col">
         <ChatContainer />
       </div>
     </AppLayout>

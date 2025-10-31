@@ -12,6 +12,9 @@ export default defineConfig({
     }),
     tailwindcss(),
   ],
+  server:{
+    port: 18081,
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),

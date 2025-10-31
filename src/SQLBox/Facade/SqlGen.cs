@@ -33,6 +33,8 @@ public static class SqlGen
             // Default empty schema + default components
             builder.WithSchemaProvider(new InMemorySchemaProvider(new DatabaseSchema { Name = "default", Dialect = "sqlite", Tables = new List<TableDoc>() }));
             builder.WithCache(new InMemorySemanticCache());
+            // Default in-memory connection manager so callers can register connections and use ConnectionId
+            builder.WithConnectionManager(new InMemoryDatabaseConnectionManager());
             _engine = builder.Build();
             return _engine!;
         }
@@ -45,15 +47,28 @@ public static class SqlGen
         {
             throw new ArgumentNullException(nameof(options), "AskOptions is required. Please provide ConnectionId.");
         }
+        if (string.IsNullOrWhiteSpace(options.ConnectionId))
+        {
+            throw new ArgumentException("ConnectionId is required.", nameof(options));
+        }
+        if (engine.ConnectionManager == null)
+        {
+            throw new InvalidOperationException("No IDatabaseConnectionManager configured. Please configure a connection manager before calling AskAsync.");
+        }
+
+        // 1) 解析连接并据此确定方言
+        var dbConn = await engine.ConnectionManager.GetConnectionAsync(options.ConnectionId, ct)
+                    ?? throw new InvalidOperationException($"Connection '{options.ConnectionId}' not found.");
 
         var normalized = await engine.InputNormalizer.NormalizeAsync(question, ct);
         var schema = await engine.SchemaProvider.LoadAsync(ct);
-        var dialect = options.Dialect ?? schema.Dialect;
+        var dialect = options.Dialect ?? dbConn.DatabaseType ?? schema.Dialect;
+
         var index = await engine.SchemaIndexer.BuildAsync(schema, ct);
         var context = await engine.SchemaRetriever.RetrieveAsync(normalized, schema, index, options.TopK, ct);
 
-        // Semantic cache lookup (question + context tables + dialect)
-        var cacheKey = ComputeCacheKey(normalized, dialect, context);
+        // 2) 语义缓存（加入 ConnectionId，避免跨连接误命中）
+        var cacheKey = ComputeCacheKey(normalized, $"{dialect}|{dbConn.Id}", context);
         if (engine.Cache != null && engine.Cache.TryGet(cacheKey, out var cached))
         {
             return cached;
@@ -82,15 +97,33 @@ public static class SqlGen
             warnings.AddRange(validation.Errors.Select(e => $"error: {e}"));
         }
 
+        // 3) 可选执行预览：基于连接对象选择执行引擎
         string? preview = null;
-        if (options.Execute && engine.ExecutorSandbox != null && validation.IsValid)
+        if (options.Execute && validation.IsValid)
         {
-            try { preview = await engine.ExecutorSandbox.ExplainAsync(gen.Sql, dialect, ct); }
-            catch (Exception ex) { warnings.Add($"execution: {ex.Message}"); }
-        }
-        else if (options.Execute && engine.ExecutorSandbox == null)
-        {
-            warnings.Add("execution disabled: no executor sandbox configured");
+            try
+            {
+                var d = (dialect ?? string.Empty).ToLowerInvariant();
+                if (d == "sqlite")
+                {
+                    // 针对 SQLite，使用内置的轻量执行沙箱
+                    var sandbox = new SqliteExecutorSandbox(new SqliteConnectionFactory(dbConn.ConnectionString));
+                    preview = await sandbox.ExplainAsync(gen.Sql, d, ct);
+                }
+                else if (engine.ExecutorSandbox != null)
+                {
+                    // 其它数据库类型：回退到全局配置的沙箱（若其已预先配置了相应工厂）
+                    preview = await engine.ExecutorSandbox.ExplainAsync(gen.Sql, d, ct);
+                }
+                else
+                {
+                    warnings.Add($"execution disabled: no executor sandbox configured for database type '{dbConn.DatabaseType}'");
+                }
+            }
+            catch (Exception ex)
+            {
+                warnings.Add($"execution: {ex.Message}");
+            }
         }
 
         var result = new SqlResult(
@@ -127,15 +160,16 @@ public sealed class SqlGenBuilder
 {
     internal IInputNormalizer InputNormalizer { get; private set; } = new DefaultInputNormalizer();
     internal ISchemaProvider SchemaProvider { get; private set; } = new InMemorySchemaProvider(new DatabaseSchema());
-    internal ISchemaIndexer SchemaIndexer { get; private set; } 
-    internal ISchemaRetriever SchemaRetriever { get; private set; } 
+    internal ISchemaIndexer SchemaIndexer { get; private set; }
+    internal ISchemaRetriever SchemaRetriever { get; private set; }
     internal IPromptAssembler PromptAssembler { get; private set; } = new DefaultPromptAssembler();
-    internal ILlmClient LlmClient { get; private set; } 
+    internal ILlmClient LlmClient { get; private set; }
     internal ISqlPostProcessor PostProcessor { get; private set; } = new DefaultPostProcessor();
     internal ISqlValidator Validator { get; private set; } = new DefaultSqlValidator();
     internal IAutoRepair? Repair { get; private set; }
     internal IExecutorSandbox? ExecutorSandbox { get; private set; }
     internal ISemanticCache? Cache { get; private set; }
+    internal IDatabaseConnectionManager? ConnectionManager { get; private set; }
 
     public SqlGenBuilder WithInputNormalizer(IInputNormalizer x) { InputNormalizer = x; return this; }
     public SqlGenBuilder WithSchemaProvider(ISchemaProvider x) { SchemaProvider = x; return this; }
@@ -148,6 +182,7 @@ public sealed class SqlGenBuilder
     public SqlGenBuilder WithRepair(IAutoRepair? x) { Repair = x; return this; }
     public SqlGenBuilder WithExecutor(IExecutorSandbox? x) { ExecutorSandbox = x; return this; }
     public SqlGenBuilder WithCache(ISemanticCache? x) { Cache = x; return this; }
+    public SqlGenBuilder WithConnectionManager(IDatabaseConnectionManager x) { ConnectionManager = x; return this; }
 
     public SqlGenEngine Build() => new(
         InputNormalizer,
@@ -159,6 +194,7 @@ public sealed class SqlGenBuilder
         PostProcessor,
         Validator,
         Repair,
+        ConnectionManager,
         ExecutorSandbox,
         Cache
     );
@@ -175,6 +211,7 @@ public sealed class SqlGenEngine
     public ISqlPostProcessor PostProcessor { get; }
     public ISqlValidator Validator { get; }
     public IAutoRepair? Repair { get; }
+    public IDatabaseConnectionManager? ConnectionManager { get; }
     public IExecutorSandbox? ExecutorSandbox { get; }
     public ISemanticCache? Cache { get; }
 
@@ -188,6 +225,7 @@ public sealed class SqlGenEngine
         ISqlPostProcessor postProcessor,
         ISqlValidator validator,
         IAutoRepair? repair,
+        IDatabaseConnectionManager? connectionManager,
         IExecutorSandbox? executorSandbox,
         ISemanticCache? cache)
     {
@@ -200,6 +238,7 @@ public sealed class SqlGenEngine
         PostProcessor = postProcessor;
         Validator = validator;
         Repair = repair;
+        ConnectionManager = connectionManager;
         ExecutorSandbox = executorSandbox;
         Cache = cache;
     }

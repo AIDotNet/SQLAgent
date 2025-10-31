@@ -2,9 +2,7 @@ import type {
   CompletionRequest,
   SSEMessage,
 } from '../types/message';
-
-// 开发环境使用后端地址，生产环境使用相对路径
-const API_BASE = import.meta.env.DEV ? 'http://localhost:5227/api' : '/api';
+import { resolveApiUrl } from './config';
 
 export type SSEMessageHandler = (message: SSEMessage) => void;
 
@@ -18,7 +16,7 @@ export class SSEClient {
     this.abortController = new AbortController();
 
     try {
-      const response = await fetch(`${API_BASE}/chat/completion`, {
+  const response = await fetch(resolveApiUrl('/chat/completion'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

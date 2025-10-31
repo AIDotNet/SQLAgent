@@ -1,11 +1,10 @@
-import { Link, useLocation } from 'react-router-dom';
-import { Database, MessageSquare, Moon, Sun } from 'lucide-react';
+import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useThemeStore } from '@/stores/themeStore';
 import { useConnectionStore } from '@/stores/connectionStore';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 export function Header() {
-  const location = useLocation();
   const { theme, toggleTheme } = useThemeStore();
   const { selectedConnectionId, connections } = useConnectionStore();
 
@@ -13,41 +12,25 @@ export function Header() {
 
   return (
     <header className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="container flex h-16 items-center justify-between">
-        <div className="flex items-center gap-6">
-          <Link to="/" className="flex items-center gap-2 font-bold text-xl">
-            <Database className="w-6 h-6" />
-            SQLBox
-          </Link>
-
-          <nav className="flex gap-1">
-            <Link to="/">
-              <Button
-                variant={location.pathname === '/' ? 'default' : 'ghost'}
-                size="sm"
-              >
-                <MessageSquare className="w-4 h-4 mr-2" />
-                对话
-              </Button>
-            </Link>
-            <Link to="/connections">
-              <Button
-                variant={location.pathname === '/connections' ? 'default' : 'ghost'}
-                size="sm"
-              >
-                <Database className="w-4 h-4 mr-2" />
-                连接管理
-              </Button>
-            </Link>
-          </nav>
-        </div>
-
-        <div className="flex items-center gap-4">
-          {selectedConnection && (
+      <div className="flex h-16 items-center justify-between px-4 lg:px-6">
+        <div className="flex items-center gap-3">
+          {selectedConnection ? (
             <div className="text-sm text-muted-foreground">
               当前连接: <span className="font-medium text-foreground">{selectedConnection.name}</span>
             </div>
+          ) : (
+            <div className="text-sm text-muted-foreground">未选择连接</div>
           )}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Avatar className="h-8 w-8">
+              <AvatarImage src="" alt="用户" />
+              <AvatarFallback>U</AvatarFallback>
+            </Avatar>
+            <span className="text-sm font-medium">多云</span>
+          </div>
 
           <Button
             variant="ghost"

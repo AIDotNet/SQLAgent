@@ -18,6 +18,7 @@ public static class PromptConstants
         3. Understand column data types and constraints
         4. Map foreign key relationships for proper JOINs
         5. Consider table descriptions and column descriptions for context
+        6. When multiple SQL statements are needed, put each statement as a separate element in the sql array
         """;
 
     public const string SqlGenerationGuidelines = """
@@ -29,18 +30,27 @@ public static class PromptConstants
         - Add LIMIT for large potential result sets
         - Parameterize all literal values
         - Use proper SQL dialect syntax
+        - CRITICAL: When generating multiple SQL statements, each statement MUST be a separate element in the sql array
+        - NEVER concatenate multiple statements into a single string
+        - Each array element should contain exactly ONE complete SQL statement
         """;
 
     public const string JsonOutputRequirements = """
         Output must be valid JSON with exactly these fields:
         {
-            "sql": "string - the generated SQL query",
+            "sql": ["array of SQL statement strings - EACH statement in its own array element"],
             "params": {
                 "param1": "value1",
                 "param2": "value2"
             },
             "tables": ["table1", "table2"]
         }
+        
+        CRITICAL RULE FOR MULTIPLE STATEMENTS:
+        - If you need to generate 3 INSERT statements, the sql array must have 3 separate elements
+        - CORRECT: "sql": ["INSERT INTO ...", "INSERT INTO ...", "INSERT INTO ..."]
+        - WRONG: "sql": ["INSERT INTO ... INSERT INTO ... INSERT INTO ..."]
+        - WRONG: "sql": ["INSERT INTO ...; INSERT INTO ...; INSERT INTO ..."]
         """;
 
     public const string SecurityRestrictions = """

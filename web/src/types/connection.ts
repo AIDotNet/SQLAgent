@@ -8,6 +8,10 @@ export interface DatabaseConnection {
   isEnabled: boolean;
   createdAt: string;
   updatedAt?: string;
+
+  // 向量索引状态（由后端补充返回）
+  vectorIndexInitialized?: boolean;
+  vectorIndexCount?: number;
 }
 
 export interface CreateConnectionRequest {

@@ -1,13 +1,24 @@
 import { useQuery } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { connectionApi } from '@/services/api';
 import { ConnectionCard } from './ConnectionCard';
 import { Loader2 } from 'lucide-react';
+import { useConnectionStore } from '@/stores/connectionStore';
 
 export function ConnectionList() {
   const { data: connections, isLoading, error } = useQuery({
     queryKey: ['connections'],
     queryFn: () => connectionApi.getAll(true),
   });
+
+  const setConnections = useConnectionStore((state) => state.setConnections);
+
+  // Sync API data to store
+  useEffect(() => {
+    if (connections) {
+      setConnections(connections);
+    }
+  }, [connections, setConnections]);
 
   if (isLoading) {
     return (

@@ -59,6 +59,18 @@ public interface ITableVectorStore
     Task<bool> IsTableVectorUpToDateAsync(string connectionId, TableDoc table, CancellationToken ct = default);
 
     /// <summary>
+    /// 检查指定连接是否已有任意表向量
+    /// Check whether any table vectors exist for the specified connection
+    /// </summary>
+    Task<bool> HasConnectionVectorsAsync(string connectionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// 统计指定连接的表向量数量
+    /// Count table vectors for the specified connection
+    /// </summary>
+    Task<int> CountConnectionVectorsAsync(string connectionId, CancellationToken ct = default);
+
+    /// <summary>
     /// 获取当前使用的嵌入模型名称
     /// Get the current embedding model name
     /// </summary>

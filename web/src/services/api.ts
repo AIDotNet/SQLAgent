@@ -67,4 +67,24 @@ export const connectionApi = {
     if (!response.ok) throw new Error('Failed to test connection');
     return response.json();
   },
+
+  // 初始化（全量重建）向量索引
+  async initIndex(id: string): Promise<{ initialized: boolean; updatedCount: number; totalCount: number }> {
+    const response = await fetch(resolveApiUrl(`/connections/${id}/index/init`), { method: 'POST' });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Failed to initialize index');
+    }
+    return response.json();
+  },
+
+  // 增量更新向量索引
+  async updateIndex(id: string): Promise<{ initialized: boolean; updatedCount: number; totalCount: number }> {
+    const response = await fetch(resolveApiUrl(`/connections/${id}/index/update`), { method: 'POST' });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(text || 'Failed to update index');
+    }
+    return response.json();
+  },
 };

@@ -37,7 +37,7 @@ public sealed class TableVectorRecord
     public string TableName { get; set; } = string.Empty;
 
     /// <summary>
-    /// 用于生成向量的嵌入模型名称（如 "text-embedding-3-small"）
+    /// 用于生成向量的嵌入模型名称（如 "text-embedding-ada-002"）
     /// Embedding model name used to generate the vector
     /// </summary>
     public string EmbeddingModel { get; set; } = string.Empty;
@@ -64,7 +64,7 @@ public sealed class TableVectorRecord
     /// 向量创建时间，用于版本管理和缓存失效
     /// Vector creation timestamp for version management and cache invalidation
     /// </summary>
-    public DateTimeOffset CreatedAt { get; set; }
+    public long CreatedAt { get; set; }
 
     /// <summary>
     /// 向量数据（动态维度，不使用特性指定维度）

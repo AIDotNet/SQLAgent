@@ -39,7 +39,7 @@ namespace SQLBox.Entities;
 /// Execution preview or result summary (if query was executed)
 /// </param>
 public sealed record SqlResult(
-    string Sql,
+    string[] Sql,
     IReadOnlyDictionary<string, object?> Parameters,
     string Dialect,
     string[] TouchedTables,

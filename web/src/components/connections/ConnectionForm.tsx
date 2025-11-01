@@ -1,11 +1,25 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Select } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { connectionApi } from '@/services/api';
 import type { CreateConnectionRequest } from '@/types/connection';
+
+// 默认连接字符串模板
+const DEFAULT_CONNECTION_STRINGS: Record<string, string> = {
+  sqlite: 'Data Source=sqlbox.db',
+  mssql: 'Server=localhost;Database=sqlbox;User Id=sa;Password=your_password;TrustServerCertificate=True;',
+  postgresql: 'Host=localhost;Port=5432;Database=sqlbox;Username=postgres;Password=your_password;',
+  mysql: 'Server=localhost;Port=3306;Database=sqlbox;User=root;Password=your_password;',
+};
 
 interface ConnectionFormProps {
   onSuccess?: () => void;
@@ -17,9 +31,27 @@ export function ConnectionForm({ onSuccess, onCancel }: ConnectionFormProps) {
   const [formData, setFormData] = useState<CreateConnectionRequest>({
     name: '',
     databaseType: 'sqlite',
-    connectionString: '',
+    connectionString: DEFAULT_CONNECTION_STRINGS.sqlite,
     description: '',
   });
+
+  // 当数据库类型改变时，自动更新连接字符串（仅当连接字符串为空或为默认值时）
+  useEffect(() => {
+    const currentDefault = DEFAULT_CONNECTION_STRINGS[formData.databaseType];
+    // 如果当前连接字符串为空，或者是某个默认值，则更新为新的默认值
+    const isDefaultOrEmpty =
+      !formData.connectionString ||
+      Object.values(DEFAULT_CONNECTION_STRINGS).includes(
+        formData.connectionString
+      );
+
+    if (isDefaultOrEmpty && currentDefault) {
+      setFormData((prev) => ({
+        ...prev,
+        connectionString: currentDefault,
+      }));
+    }
+  }, [formData.databaseType]);
 
   const createMutation = useMutation({
     mutationFn: connectionApi.create,
@@ -50,14 +82,19 @@ export function ConnectionForm({ onSuccess, onCancel }: ConnectionFormProps) {
         <label className="block text-sm font-medium mb-2">数据库类型</label>
         <Select
           value={formData.databaseType}
-          onChange={(e) =>
-            setFormData({ ...formData, databaseType: e.target.value })
+          onValueChange={(value) =>
+            setFormData({ ...formData, databaseType: value })
           }
         >
-          <option value="sqlite">SQLite</option>
-          <option value="mssql">SQL Server</option>
-          <option value="postgresql">PostgreSQL</option>
-          <option value="mysql">MySQL</option>
+          <SelectTrigger>
+            <SelectValue placeholder="选择数据库类型" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="sqlite">SQLite</SelectItem>
+            <SelectItem value="mssql">SQL Server</SelectItem>
+            <SelectItem value="postgresql">PostgreSQL</SelectItem>
+            <SelectItem value="mysql">MySQL</SelectItem>
+          </SelectContent>
         </Select>
       </div>
 

@@ -7,9 +7,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Making.AspNetCore" Version="1.0.9-preview" />
-        <PackageReference Include="Making.MiniApis.Analyzers" Version="1.0.9-preview" />
-        <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0-rc.2.25502.107" />
+      <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0-rc.2.25502.107" />
+      <PackageReference Include="Scalar.AspNetCore" Version="2.9.0" />
+      <!-- Serilog packages -->
+      <PackageReference Include="Serilog.AspNetCore" Version="8.0.0" />
+      <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.0" />
+      <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
+      <PackageReference Include="Serilog.Sinks.File" Version="5.0.1" />
+      <PackageReference Include="Serilog.Enrichers.Environment" Version="2.2.0" />
+      <!-- OpenAI official .NET SDK for server-side ChatClient and streaming -->
+      <PackageReference Include="OpenAI" Version="2.5.0" />
     </ItemGroup>
 
     <ItemGroup>

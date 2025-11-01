@@ -101,6 +101,16 @@ public class ConnectionResponse
     /// 更新时间
     /// </summary>
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// 是否已完成表向量索引初始化（该连接是否存在任意索引记录）
+    /// </summary>
+    public bool VectorIndexInitialized { get; set; }
+
+    /// <summary>
+    /// 当前表向量索引记录数量
+    /// </summary>
+    public int VectorIndexCount { get; set; }
 }
 
 /// <summary>

@@ -1,5 +1,5 @@
 const rawBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.trim();
-const fallbackBase = import.meta.env.DEV ? 'http://localhost:5227/api' : '/api';
+const fallbackBase =  '/api';
 
 const normalizedBase = (rawBase && rawBase.length > 0 ? rawBase : fallbackBase).replace(/\/$/, '');
 

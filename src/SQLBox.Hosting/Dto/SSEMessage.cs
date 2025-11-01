@@ -2,132 +2,215 @@ using System.Text.Json.Serialization;
 
 namespace SQLBox.Hosting.Dto;
 
+// ============================================
+// SSE 消息类型定义（新架构：类似 ChatGPT/Claude）
+// ============================================
+
 /// <summary>
-/// SSE消息类型枚举
+/// SSE 事件类型
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
-public enum SSEMessageType
+public enum SSEEventType
 {
-    Text,      // 普通文本
-    Sql,       // SQL语句
-    Data,      // 查询结果数据
-    Chart,     // 图表配置
-    Error,     // 错误信息
-    Done       // 完成标记
+    delta,  // 增量文本（流式输出）
+    block,  // 内容块（SQL、数据、图表等）
+    done,   // 完成
+    error   // 错误
 }
 
 /// <summary>
-/// SSE消息基类
+/// SSE 消息基类
 /// </summary>
-public class SSEMessage
+public abstract class SSEMessage
 {
     /// <summary>
-    /// 消息类型
+    /// 事件类型
     /// </summary>
-    public SSEMessageType Type { get; set; }
-    
-    /// <summary>
-    /// 消息ID
-    /// </summary>
-    public string MessageId { get; set; } = Guid.NewGuid().ToString();
-    
-    /// <summary>
-    /// 时间戳
-    /// </summary>
-    public long Timestamp { get; set; } = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+    [JsonPropertyName("type")]
+    public abstract SSEEventType Type { get; }
 }
 
 /// <summary>
-/// 文本消息
+/// 增量文本消息（流式文本输出）
 /// </summary>
-public class TextMessage : SSEMessage
+public class DeltaMessage : SSEMessage
 {
-    public TextMessage()
-    {
-        Type = SSEMessageType.Text;
-    }
+    [JsonPropertyName("type")]
+    public override SSEEventType Type => SSEEventType.delta;
     
     /// <summary>
-    /// 文本内容
+    /// 增量文本内容
     /// </summary>
-    public string Content { get; set; } = string.Empty;
+    [JsonPropertyName("delta")]
+    public string Delta { get; set; } = string.Empty;
 }
 
 /// <summary>
-/// SQL消息
+/// 内容块消息
 /// </summary>
-public class SqlMessage : SSEMessage
+public class BlockMessage : SSEMessage
 {
-    public SqlMessage()
-    {
-        Type = SSEMessageType.Sql;
-    }
+    [JsonPropertyName("type")]
+    public override SSEEventType Type => SSEEventType.block;
     
     /// <summary>
-    /// SQL语句
+    /// 内容块
     /// </summary>
+    [JsonPropertyName("block")]
+    public ContentBlock Block { get; set; } = new SqlBlock();
+}
+
+/// <summary>
+/// 错误消息
+/// </summary>
+public class ErrorMessage : SSEMessage
+{
+    [JsonPropertyName("type")]
+    public override SSEEventType Type => SSEEventType.error;
+    
+    /// <summary>
+    /// 错误代码
+    /// </summary>
+    [JsonPropertyName("code")]
+    public string Code { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// 错误消息
+    /// </summary>
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = string.Empty;
+    
+    /// <summary>
+    /// 详细信息
+    /// </summary>
+    [JsonPropertyName("details")]
+    public string? Details { get; set; }
+}
+
+/// <summary>
+/// 完成消息
+/// </summary>
+public class DoneMessage : SSEMessage
+{
+    [JsonPropertyName("type")]
+    public override SSEEventType Type => SSEEventType.done;
+    
+    /// <summary>
+    /// 执行耗时(毫秒)
+    /// </summary>
+    [JsonPropertyName("elapsedMs")]
+    public long ElapsedMs { get; set; }
+}
+
+// ============================================
+// 内容块类型定义
+// ============================================
+
+/// <summary>
+/// 内容块类型
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ContentBlockType
+{
+    Sql,    // SQL 代码
+    Data,   // 数据表格
+    Chart,  // 图表
+    Error   // 错误
+}
+
+/// <summary>
+/// 内容块基类
+/// </summary>
+[JsonPolymorphic(TypeDiscriminatorPropertyName = "type")]
+[JsonDerivedType(typeof(SqlBlock), "sql")]
+[JsonDerivedType(typeof(DataBlock), "data")]
+[JsonDerivedType(typeof(ChartBlock), "chart")]
+[JsonDerivedType(typeof(ErrorBlock), "error")]
+public abstract class ContentBlock
+{
+    /// <summary>
+    /// 块ID
+    /// </summary>
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = Guid.NewGuid().ToString();
+}
+
+/// <summary>
+/// SQL 代码块
+/// </summary>
+public class SqlBlock : ContentBlock
+{
+    /// <summary>
+    /// SQL 语句
+    /// </summary>
+    [JsonPropertyName("sql")]
     public string Sql { get; set; } = string.Empty;
     
     /// <summary>
-    /// 使用的表
+    /// 涉及的表
     /// </summary>
+    [JsonPropertyName("tables")]
     public string[] Tables { get; set; } = Array.Empty<string>();
     
     /// <summary>
-    /// 方言
+    /// SQL 方言
     /// </summary>
+    [JsonPropertyName("dialect")]
     public string? Dialect { get; set; }
 }
 
 /// <summary>
-/// 数据消息
+/// 数据表格块
 /// </summary>
-public class DataMessage : SSEMessage
+public class DataBlock : ContentBlock
 {
-    public DataMessage()
-    {
-        Type = SSEMessageType.Data;
-    }
     
     /// <summary>
     /// 列名
     /// </summary>
+    [JsonPropertyName("columns")]
     public string[] Columns { get; set; } = Array.Empty<string>();
     
     /// <summary>
     /// 数据行
     /// </summary>
+    [JsonPropertyName("rows")]
     public object[][] Rows { get; set; } = Array.Empty<object[]>();
     
     /// <summary>
     /// 总行数
     /// </summary>
+    [JsonPropertyName("totalRows")]
     public int TotalRows { get; set; }
 }
 
 /// <summary>
-/// 图表消息
+/// 图表块
 /// </summary>
-public class ChartMessage : SSEMessage
+public class ChartBlock : ContentBlock
 {
-    public ChartMessage()
-    {
-        Type = SSEMessageType.Chart;
-    }
-    
     /// <summary>
-    /// 图表类型 (bar, line, pie, scatter, etc.)
+    /// 图表类型
     /// </summary>
+    [JsonPropertyName("chartType")]
     public string ChartType { get; set; } = "bar";
     
     /// <summary>
-    /// 图表配置
+    /// ECharts option 配置 JSON 字符串
     /// </summary>
+    [JsonPropertyName("echartsOption")]
+    public string? EchartsOption { get; set; }
+    
+    /// <summary>
+    /// 图表配置（兼容旧版）
+    /// </summary>
+    [JsonPropertyName("config")]
     public ChartConfig Config { get; set; } = new();
     
     /// <summary>
-    /// 图表数据
+    /// 图表数据（兼容旧版）
     /// </summary>
+    [JsonPropertyName("data")]
     public object Data { get; set; } = new { };
 }
 
@@ -139,62 +222,48 @@ public class ChartConfig
     /// <summary>
     /// X轴字段
     /// </summary>
+    [JsonPropertyName("xAxis")]
     public string? XAxis { get; set; }
     
     /// <summary>
     /// Y轴字段
     /// </summary>
+    [JsonPropertyName("yAxis")]
     public string[]? YAxis { get; set; }
     
     /// <summary>
     /// 标题
     /// </summary>
+    [JsonPropertyName("title")]
     public string? Title { get; set; }
     
     /// <summary>
-    /// 图例
+    /// 显示图例
     /// </summary>
+    [JsonPropertyName("showLegend")]
     public bool ShowLegend { get; set; } = true;
 }
 
 /// <summary>
-/// 错误消息
+/// 错误块
 /// </summary>
-public class ErrorMessage : SSEMessage
+public class ErrorBlock : ContentBlock
 {
-    public ErrorMessage()
-    {
-        Type = SSEMessageType.Error;
-    }
-    
     /// <summary>
     /// 错误代码
     /// </summary>
+    [JsonPropertyName("code")]
     public string Code { get; set; } = string.Empty;
     
     /// <summary>
     /// 错误消息
     /// </summary>
+    [JsonPropertyName("message")]
     public string Message { get; set; } = string.Empty;
     
     /// <summary>
     /// 详细信息
     /// </summary>
+    [JsonPropertyName("details")]
     public string? Details { get; set; }
-}
-
-/// <summary>
-/// 完成消息
-/// </summary>
-public class DoneMessage : SSEMessage
-{
-    public DoneMessage()
-    {
-        Type = SSEMessageType.Done;
-    }
-    
-    /// <summary>
-    /// 执行耗时(毫秒)
-    /// </summary>
-    public long ElapsedMs { get; set; }
 }

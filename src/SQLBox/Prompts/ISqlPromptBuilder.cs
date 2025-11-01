@@ -10,10 +10,12 @@ public interface ISqlPromptBuilder
         string userQuestion,
         string dialect,
         SchemaContext schemaContext,
+        bool allowWrite,
         CancellationToken ct = default);
 
     string BuildPrompt(
         string userQuestion,
         string dialect,
-        SchemaContext schemaContext);
+        SchemaContext schemaContext,
+        bool allowWrite);
 }

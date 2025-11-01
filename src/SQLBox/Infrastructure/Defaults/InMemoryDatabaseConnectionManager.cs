@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using SQLBox.Entities;
@@ -9,15 +11,82 @@ using SQLBox.Entities;
 namespace SQLBox.Infrastructure.Defaults;
 
 /// <summary>
-/// 内存数据库连接管理器的默认实现
-/// Default in-memory implementation of database connection manager
+/// 内存数据库连接管理器的默认实现（支持可选的 JSON 文件持久化）
+/// Default in-memory implementation with optional JSON persistence
 /// </summary>
 public sealed class InMemoryDatabaseConnectionManager : IDatabaseConnectionManager
 {
     private readonly ConcurrentDictionary<string, DatabaseConnection> _connections = new();
+    private readonly string? _filePath;
+    private readonly SemaphoreSlim _ioLock = new(1, 1);
+    private readonly JsonSerializerOptions _jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+
+    /// <summary>
+    /// 纯内存构造（不持久化）
+    /// </summary>
+    public InMemoryDatabaseConnectionManager() { }
+
+    /// <summary>
+    /// 指定 JSON 路径的构造（启用持久化）
+    /// </summary>
+    public InMemoryDatabaseConnectionManager(string filePath)
+    {
+        _filePath = filePath;
+        LoadFromFile();
+    }
+
+    private void LoadFromFile()
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_filePath)) return;
+            if (!File.Exists(_filePath)) return;
+
+            var json = File.ReadAllText(_filePath);
+            var list = JsonSerializer.Deserialize<List<DatabaseConnection>>(json) ?? new List<DatabaseConnection>();
+            _connections.Clear();
+            foreach (var c in list)
+            {
+                if (!string.IsNullOrWhiteSpace(c.Id))
+                {
+                    _connections[c.Id] = c;
+                }
+            }
+        }
+        catch
+        {
+            // 忽略读取失败，保持空数据
+        }
+    }
+
+    private async Task PersistAsync(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_filePath)) return;
+
+        await _ioLock.WaitAsync(cancellationToken);
+        try
+        {
+            var dir = Path.GetDirectoryName(_filePath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            var list = _connections.Values
+                .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var json = JsonSerializer.Serialize(list, _jsonOptions);
+            await File.WriteAllTextAsync(_filePath, json, cancellationToken);
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
 
     /// <inheritdoc />
-    public Task<DatabaseConnection> AddConnectionAsync(DatabaseConnection connection, CancellationToken cancellationToken = default)
+    public async Task<DatabaseConnection> AddConnectionAsync(DatabaseConnection connection, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(connection.Id))
         {
@@ -29,11 +98,12 @@ public sealed class InMemoryDatabaseConnectionManager : IDatabaseConnectionManag
             throw new InvalidOperationException($"Connection with ID '{connection.Id}' already exists");
         }
 
-        return Task.FromResult(connection);
+        await PersistAsync(cancellationToken);
+        return connection;
     }
 
     /// <inheritdoc />
-    public Task<DatabaseConnection> UpdateConnectionAsync(DatabaseConnection connection, CancellationToken cancellationToken = default)
+    public async Task<DatabaseConnection> UpdateConnectionAsync(DatabaseConnection connection, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(connection.Id))
         {
@@ -59,11 +129,12 @@ public sealed class InMemoryDatabaseConnectionManager : IDatabaseConnectionManag
         };
         _connections[connection.Id] = updatedConnection;
 
-        return Task.FromResult(updatedConnection);
+        await PersistAsync(cancellationToken);
+        return updatedConnection;
     }
 
     /// <inheritdoc />
-    public Task DeleteConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
+    public async Task DeleteConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(connectionId))
         {
@@ -71,7 +142,7 @@ public sealed class InMemoryDatabaseConnectionManager : IDatabaseConnectionManag
         }
 
         _connections.TryRemove(connectionId, out _);
-        return Task.CompletedTask;
+        await PersistAsync(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -91,7 +162,7 @@ public sealed class InMemoryDatabaseConnectionManager : IDatabaseConnectionManag
     {
         var connections = _connections.Values
             .Where(c => includeDisabled || c.IsEnabled)
-            .OrderBy(c => c.Name)
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
         return Task.FromResult<IReadOnlyList<DatabaseConnection>>(connections);
@@ -100,11 +171,7 @@ public sealed class InMemoryDatabaseConnectionManager : IDatabaseConnectionManag
     /// <inheritdoc />
     public Task<bool> TestConnectionAsync(string connectionId, CancellationToken cancellationToken = default)
     {
-        // 这是一个简单的实现，仅检查连接是否存在
-        // This is a simple implementation that only checks if the connection exists
-        // 在实际应用中，这里应该尝试打开数据库连接进行测试
-        // In a real application, this should attempt to open the database connection for testing
-        
+        // 简单实现：仅检查连接是否存在
         if (string.IsNullOrWhiteSpace(connectionId))
         {
             return Task.FromResult(false);

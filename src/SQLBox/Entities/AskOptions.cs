@@ -51,6 +51,6 @@ public sealed record AskOptions(
     /// Whether to allow generation of write operations (INSERT, UPDATE, DELETE)
     /// If false, only read-only queries (SELECT) are allowed to ensure data safety
     /// </summary>
-    bool AllowWrite = false
+    bool AllowWrite = true
 );
 

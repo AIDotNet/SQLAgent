@@ -56,17 +56,10 @@ public sealed class SqliteVecTableStore : ITableVectorStore, IDisposable
                 new VectorStoreDataProperty("Dimensions", typeof(int)),
                 new VectorStoreDataProperty("SearchableText", typeof(string)) { IsFullTextIndexed = true },
                 new VectorStoreDataProperty("TableMetadata", typeof(string)),
-                new VectorStoreDataProperty("CreatedAt", typeof(DateTimeOffset)),
+                new VectorStoreDataProperty("CreatedAt", typeof(long)),
                 new VectorStoreVectorProperty("Vector", typeof(ReadOnlyMemory<float>),
                     _detectedDimensions ?? _config.Dimensions ?? 1536)
                 {
-                    DistanceFunction = _config.DistanceMetric switch
-                    {
-                        DistanceMetric.Cosine => "cosine",
-                        DistanceMetric.Euclidean => "euclidean",
-                        DistanceMetric.DotProduct => "dotproduct",
-                        _ => "cosine"
-                    }
                 }
             }
         };
@@ -120,7 +113,7 @@ public sealed class SqliteVecTableStore : ITableVectorStore, IDisposable
             Dimensions = table.Vector.Length,
             SearchableText = TableVectorRecord.BuildSearchableText(table),
             TableMetadata = TableVectorRecord.SerializeTableMetadata(table),
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
             Vector = new ReadOnlyMemory<float>(table.Vector)
         };
 
@@ -128,7 +121,7 @@ public sealed class SqliteVecTableStore : ITableVectorStore, IDisposable
     }
 
     public async Task SaveTableVectorsBatchAsync(string connectionId, IEnumerable<TableDoc> tables,
-        Dictionary<string,string> metaData,
+        Dictionary<string, string> metaData,
         CancellationToken ct = default)
     {
         await EnsureCollectionAsync(ct);
@@ -154,7 +147,7 @@ public sealed class SqliteVecTableStore : ITableVectorStore, IDisposable
                 Dimensions = table.Vector.Length,
                 SearchableText = TableVectorRecord.BuildSearchableText(table),
                 TableMetadata = TableVectorRecord.SerializeTableMetadata(table),
-                CreatedAt = DateTimeOffset.UtcNow,
+                CreatedAt = DateTimeOffset.UtcNow.ToUnixTimeSeconds(),
                 Vector = new ReadOnlyMemory<float>(table.Vector)
             };
 
@@ -215,7 +208,7 @@ public sealed class SqliteVecTableStore : ITableVectorStore, IDisposable
         // 使用一个零向量进行搜索（只是为了获取所有匹配的记录）
         var zeroVector = new ReadOnlyMemory<float>(new float[_detectedDimensions ?? 1536]);
         var keysToDelete = new List<string>();
-        await foreach (var result in _collection!.SearchAsync(zeroVector, -1, searchOptions, ct))
+        await foreach (var result in _collection!.SearchAsync(zeroVector, 4096, searchOptions, ct))
         {
             if (result?.Record?.Id != null)
             {
@@ -229,6 +222,37 @@ public sealed class SqliteVecTableStore : ITableVectorStore, IDisposable
         }
     }
 
+    // 判断指定连接是否已有任意表向量（存在即返回 true）
+    public async Task<bool> HasConnectionVectorsAsync(string connectionId, CancellationToken ct = default)
+    {
+        await EnsureCollectionAsync(ct);
+
+        await foreach (var _ in _collection!.GetAsync(x => x.ConnectionId == connectionId, 1, cancellationToken: ct))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    // 统计指定连接下表向量数量（用于状态提示）
+    public async Task<int> CountConnectionVectorsAsync(string connectionId, CancellationToken ct = default)
+    {
+        await EnsureCollectionAsync(ct);
+
+        var zeroVector = new ReadOnlyMemory<float>(new float[_detectedDimensions ?? 1536]);
+        var searchOptions = new VectorSearchOptions<TableVectorRecord>
+        {
+            Filter = record => record.ConnectionId == connectionId,
+        };
+
+        var count = 0;
+        await foreach (var _ in _collection!.SearchAsync(zeroVector, 4096, searchOptions, ct))
+        {
+            count++;
+        }
+        return count;
+    }
+
     public async Task<bool> IsTableVectorUpToDateAsync(
         string connectionId,
         string schema,
@@ -236,27 +260,27 @@ public sealed class SqliteVecTableStore : ITableVectorStore, IDisposable
         CancellationToken ct = default)
     {
         await EnsureCollectionAsync(ct);
-    
+
         var id = TableVectorRecord.BuildId(connectionId, schema, tableName, _embedder.Model);
-    
         await foreach (var record in _collection!.GetAsync(x =>
-                               x.ConnectionId == connectionId && x.Schema == schema && x.TableName == tableName, 1,
-                           cancellationToken: ct))
+                           x.ConnectionId == connectionId && x.Schema == schema && x.TableName == tableName, 4096,
+                       cancellationToken: ct))
         {
             // 检查缓存是否过期
             if (_config.CacheExpiration.HasValue)
             {
-                var expirationTime = record.CreatedAt + _config.CacheExpiration.Value;
+                var createdAt = DateTimeOffset.FromUnixTimeSeconds((long)record.CreatedAt);
+                var expirationTime = createdAt + _config.CacheExpiration.Value;
                 if (DateTimeOffset.UtcNow > expirationTime)
                 {
                     return false;
                 }
             }
-    
+
             // 检查模型是否匹配
             return record.EmbeddingModel == _embedder.Model;
         }
-    
+
         return false;
     }
 

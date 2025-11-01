@@ -27,17 +27,22 @@ export function ChatInput({ onSend, disabled }: ChatInputProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-2">
+    <form onSubmit={handleSubmit} className="relative">
       <Textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="输入你的问题，例如：显示所有用户..."
+        placeholder="输入您的问题，例如：显示所有用户... (Enter 发送，Shift+Enter 换行)"
         disabled={disabled}
         rows={3}
-        className="resize-none"
+        className="resize-none pr-12 min-h-[80px]"
       />
-      <Button type="submit" disabled={disabled || !input.trim()} size="icon">
+      <Button 
+        type="submit" 
+        disabled={disabled || !input.trim()} 
+        size="icon"
+        className="absolute right-2 bottom-2 h-8 w-8"
+      >
         <Send className="w-4 h-4" />
       </Button>
     </form>

@@ -14,14 +14,15 @@ public sealed class DynamicSqlPromptBuilder : ISqlPromptBuilder
         string userQuestion,
         string dialect,
         SchemaContext schemaContext,
+        bool allowWrite,
         CancellationToken ct = default)
     {
-        return Task.FromResult(BuildPrompt(userQuestion, dialect, schemaContext));
+        return Task.FromResult(BuildPrompt(userQuestion, dialect, schemaContext, allowWrite));
     }
 
-    public string BuildPrompt(string userQuestion, string dialect, SchemaContext schemaContext)
+    public string BuildPrompt(string userQuestion, string dialect, SchemaContext schemaContext, bool allowWrite)
     {
-        var systemPrompt = BuildDynamicSystemPrompt(dialect);
+        var systemPrompt = BuildDynamicSystemPrompt(dialect, allowWrite);
         var schemaSummary = BuildSchemaSummary(schemaContext, dialect);
         var queryGuidance = BuildQueryGuidance(userQuestion, schemaContext);
 
@@ -38,21 +39,39 @@ public sealed class DynamicSqlPromptBuilder : ISqlPromptBuilder
             """;
     }
 
-    private string BuildDynamicSystemPrompt(string dialect)
+    private string BuildDynamicSystemPrompt(string dialect, bool allowWrite)
     {
         var dialectSpecific = GetDialectSpecificGuidance(dialect);
 
+        if (!allowWrite)
+        {
+            return $"You are a SQL query generator. Follow these principles:\n\n" +
+                   $"CORE RULES:\n" +
+                   $"1. Generate only SELECT queries (no INSERT/UPDATE/DELETE/DDL)\n" +
+                   $"2. Use actual table/column names from the provided schema\n" +
+                   $"3. Parameterize all literal values ({GetParameterStyle(dialect)})\n" +
+                   $"4. Return valid JSON: {{\"sql\": \"query\", \"params\": {{...}}, \"tables\": [...]}}\n\n" +
+                   $"{dialectSpecific}\n\n" +
+                   $"SECURITY:\n" +
+                   $"- Read-only mode: Only SELECT statements allowed\n" +
+                   $"- Use parameterized queries for all user input\n" +
+                   $"- No DDL or data modification statements";
+        }
+
+        // allowWrite == true
         return $"You are a SQL query generator. Follow these principles:\n\n" +
                $"CORE RULES:\n" +
-               $"1. Generate only SELECT queries (no INSERT/UPDATE/DELETE)\n" +
+               $"1. Generate queries for SELECT as well as data/structure changes when explicitly requested\n" +
+               $"   (INSERT, UPDATE, DELETE; CREATE/ALTER/DROP TABLE)\n" +
                $"2. Use actual table/column names from the provided schema\n" +
                $"3. Parameterize all literal values ({GetParameterStyle(dialect)})\n" +
                $"4. Return valid JSON: {{\"sql\": \"query\", \"params\": {{...}}, \"tables\": [...]}}\n\n" +
                $"{dialectSpecific}\n\n" +
                $"SECURITY:\n" +
-               $"- Only SELECT statements allowed\n" +
-               $"- Use parameterized queries for all user input\n" +
-               $"- No DDL or data modification statements";
+               $"- Write operations allowed: be conservative and safe\n" +
+               $"- Always parameterize user input; never concatenate\n" +
+               $"- For UPDATE/DELETE, include precise WHERE clauses to avoid full-table changes\n" +
+               $"- For DDL (CREATE/ALTER/DROP), ensure correct syntax and explicit intent";
     }
 
     private string BuildSchemaSummary(SchemaContext context, string dialect)

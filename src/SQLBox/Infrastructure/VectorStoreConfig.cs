@@ -18,7 +18,7 @@ public sealed class VectorStoreConfig
     /// 连接字符串或数据库路径
     /// Connection string or database path
     /// </summary>
-    public string ConnectionString { get; set; } = "vectors.db";
+    public string ConnectionString { get; set; } = "Data Source=vectors.db";
 
     /// <summary>
     /// 集合名称（用于某些向量数据库）

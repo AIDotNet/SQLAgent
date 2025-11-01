@@ -1,13 +1,11 @@
-using System.Diagnostics;
-using Making.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 using SQLBox.Entities;
 using SQLBox.Hosting.Dto;
 using SQLBox.Infrastructure;
+using System.Diagnostics;
 
 namespace SQLBox.Hosting.Services;
 
-[MiniApi(Route = "/api/connections")]
 public class ConnectionService
 {
     private readonly IDatabaseConnectionManager _connectionManager;

@@ -1,0 +1,13 @@
+[
+  {
+    "Id": "f850d2f7-6956-4f38-a149-1d7303e4ee4e",
+    "Name": "\u6D4B\u8BD5",
+    "DatabaseType": "sqlite",
+    "ConnectionString": "Data Source=sqlbox.db",
+    "Description": "",
+    "CreatedAt": "2025-10-31T17:24:37.2730742Z",
+    "UpdatedAt": null,
+    "IsEnabled": true,
+    "Metadata": null
+  }
+]

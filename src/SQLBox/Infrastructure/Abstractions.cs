@@ -28,10 +28,10 @@ public interface ISchemaRetriever
 
 public interface IPromptAssembler
 {
-    Task<string> AssembleAsync(string question, string dialect, SchemaContext context, CancellationToken ct = default);
+    Task<string> AssembleAsync(string question, string dialect, SchemaContext context, AskOptions options, CancellationToken ct = default);
 }
 
-public sealed record GeneratedSql(string Sql, IReadOnlyDictionary<string, object?> Parameters, string[] Tables);
+public sealed record GeneratedSql(string[] Sql, IReadOnlyDictionary<string, object?> Parameters, string[] Tables);
 
 public interface ILlmClient
 {
@@ -45,7 +45,7 @@ public interface ISqlPostProcessor
 
 public interface ISqlValidator
 {
-    Task<ValidationReport> ValidateAsync(string sql, SchemaContext context, AskOptions options, CancellationToken ct = default);
+    Task<ValidationReport> ValidateAsync(string[] sql, SchemaContext context, AskOptions options, CancellationToken ct = default);
 }
 
 public interface IAutoRepair

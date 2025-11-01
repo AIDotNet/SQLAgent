@@ -13,7 +13,11 @@ export default defineConfig({
     tailwindcss(),
   ],
   server:{
-    port: 18081,
+    proxy:{
+      '/api':{
+        target: 'http://localhost:18080/',
+      }
+    }
   },
   resolve: {
     alias: {

@@ -28,7 +28,7 @@ public sealed class ExtensionsAiLlmClient : ILlmClient
     public async Task<GeneratedSql> GenerateAsync(string prompt, string dialect, SchemaContext schemaContext, CancellationToken ct = default)
     {
         // Enhanced method with schema-aware prompt
-        var enhancedPrompt = await _promptBuilder.BuildPromptAsync(prompt, dialect, schemaContext, ct);
+        var enhancedPrompt = await _promptBuilder.BuildPromptAsync(prompt, dialect, schemaContext,true, ct);
 
         var messages = new List<ChatMessage>
         {
@@ -72,7 +72,7 @@ public sealed class ExtensionsAiLlmClient : ILlmClient
             }
 
             if (!string.IsNullOrWhiteSpace(sql))
-                return new GeneratedSql(sql, parms, tables);
+                return new GeneratedSql(new[] { sql }, parms, tables);
         }
         catch
         {
@@ -82,7 +82,7 @@ public sealed class ExtensionsAiLlmClient : ILlmClient
         // Fallback: extract first SELECT...
         var m = Regex.Match(content, @"(?is)\bselect\b[\s\S]+$");
         var sqlFallback = m.Success ? m.Value.Trim() : "SELECT 1 AS value";
-        return new GeneratedSql(sqlFallback, new Dictionary<string, object?>(), Array.Empty<string>());
+        return new GeneratedSql(new[] { sqlFallback }, new Dictionary<string, object?>(), Array.Empty<string>());
     }
 }
 

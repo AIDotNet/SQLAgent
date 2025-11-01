@@ -1,0 +1,15 @@
+[
+  {
+    "Id": "01be5420-f059-4b03-a4f4-beb7f622ebae",
+    "Name": "TokenAI",
+    "Type": 2,
+    "Endpoint": "https://api.token-ai.cn/v1",
+    "ApiKey": "sk-54wmziQVRPVhAOeZbk9ewXfXsTQEvRC83Pw6uu",
+    "AvailableModels": "gpt-4.1, gpt-4.1-mini, gpt-5, gpt-5-mini",
+    "DefaultModel": "gpt-5-mini",
+    "IsEnabled": true,
+    "ExtraConfig": "",
+    "CreatedAt": "2025-10-31T17:51:26.8086317Z",
+    "UpdatedAt": "2025-10-31T17:51:26.8086319Z"
+  }
+]

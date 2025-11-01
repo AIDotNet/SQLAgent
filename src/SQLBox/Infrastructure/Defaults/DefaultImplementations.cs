@@ -101,10 +101,10 @@ public sealed class DefaultPromptAssembler : IPromptAssembler
         _promptBuilder = promptBuilder;
     }
 
-    public Task<string> AssembleAsync(string question, string dialect, SchemaContext context, CancellationToken ct = default)
+    public Task<string> AssembleAsync(string question, string dialect, SchemaContext context, AskOptions options, CancellationToken ct = default)
     {
-        // Use the new schema-aware prompt builder
-        return _promptBuilder.BuildPromptAsync(question, dialect, context, ct);
+        // Use the new schema-aware prompt builder with read/write control
+        return _promptBuilder.BuildPromptAsync(question, dialect, context, options.AllowWrite, ct);
     }
 }
 
@@ -114,10 +114,11 @@ public sealed class DefaultPostProcessor : ISqlPostProcessor
 {
     public Task<GeneratedSql> PostProcessAsync(GeneratedSql input, string dialect, CancellationToken ct = default)
     {
-        var sql = input.Sql.Replace(";", " ").Trim();
+        var combinedSql = string.Join(" ", input.Sql);
+        var sql = combinedSql.Replace(";", " ").Trim();
         sql = Regex.Replace(sql, "\\s+", " ");
         sql = NormalizeParams(sql, dialect);
-        return Task.FromResult(input with { Sql = sql });
+        return Task.FromResult(input with { Sql = new[] { sql } });
 
         static string NormalizeParams(string s, string dialect)
         {
@@ -150,15 +151,21 @@ public sealed class DefaultSqlValidator : ISqlValidator
 {
     private static readonly string[] Forbidden = { "insert", "update", "delete", "drop", "alter", "truncate" };
 
-    public Task<ValidationReport> ValidateAsync(string sql, SchemaContext context, AskOptions options, CancellationToken ct = default)
+    public Task<ValidationReport> ValidateAsync(string[] sql, SchemaContext context, AskOptions options, CancellationToken ct = default)
     {
         var warnings = new List<string>();
         var errors = new List<string>();
 
-        var lowered = sql.ToLowerInvariant();
+        var combinedSql = string.Join(" ", sql);
+        var lowered = combinedSql.ToLowerInvariant();
 
-        if (!Regex.IsMatch(lowered, @"^\s*(explain\s+)?select\b"))
-            errors.Add("Only SELECT/EXPLAIN SELECT queries are allowed.");
+        var allowedPattern = options.AllowWrite
+            ? @"^\s*(explain\s+)?(select|insert|update|delete|create\s+table|drop\s+table|alter\s+table)\b"
+            : @"^\s*(explain\s+)?select\b";
+        if (!Regex.IsMatch(lowered, allowedPattern))
+            errors.Add(options.AllowWrite
+                ? "Unsupported SQL statement type. Allowed: SELECT/INSERT/UPDATE/DELETE/CREATE TABLE/ALTER TABLE/DROP TABLE."
+                : "Only SELECT/EXPLAIN SELECT queries are allowed (read-only mode).");
 
         foreach (var f in Forbidden)
         {
@@ -166,16 +173,33 @@ public sealed class DefaultSqlValidator : ISqlValidator
                 errors.Add($"Statement contains forbidden keyword: {f}.");
         }
 
-        if (Regex.IsMatch(lowered, @"select\s+\*"))
-            warnings.Add("SELECT * detected; consider projecting explicit columns.");
+        // Statement type detection for targeted validations
+        var isSelect = Regex.IsMatch(lowered, @"^\s*(explain\s+)?select\b");
+        var isUpdate = Regex.IsMatch(lowered, @"^\s*update\b");
+        var isDelete = Regex.IsMatch(lowered, @"^\s*delete\b");
+        var isInsert = Regex.IsMatch(lowered, @"^\s*insert\b");
+        var isDdl = Regex.IsMatch(lowered, @"^\s*(create\s+table|drop\s+table|alter\s+table)\b");
 
-        if (!Regex.IsMatch(lowered, @"\bwhere\b"))
-            warnings.Add("No WHERE clause; consider adding a time range filter (e.g., created_at >= ...) to reduce scan size.");
+        if (isSelect)
+        {
+            if (Regex.IsMatch(lowered, @"select\s+\*"))
+                warnings.Add("SELECT * detected; consider projecting explicit columns.");
 
-        if (!Regex.IsMatch(lowered, @"\blimit\b"))
-            warnings.Add("No LIMIT found; consider adding LIMIT or pagination for large result sets.");
+            if (!Regex.IsMatch(lowered, @"\bwhere\b"))
+                warnings.Add("No WHERE clause; consider adding filters (e.g., created_at >= ...) to reduce scan size.");
 
-        var touched = ExtractTables(sql);
+            if (!Regex.IsMatch(lowered, @"\blimit\b"))
+                warnings.Add("No LIMIT found; consider adding LIMIT or pagination for large result sets.");
+        }
+        else if ((isUpdate || isDelete) && options.AllowWrite)
+        {
+            // Strong safety for write operations
+            if (!Regex.IsMatch(lowered, @"\bwhere\b"))
+                errors.Add("Unsafe write: UPDATE/DELETE without WHERE is not allowed.");
+        }
+        // For INSERT/DDL, do not emit WHERE/LIMIT warnings
+
+        var touched = ExtractTables(combinedSql);
         var inContext = new HashSet<string>(context.Tables.Select(t => t.Name), StringComparer.OrdinalIgnoreCase);
         foreach (var t in touched)
         {

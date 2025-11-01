@@ -1,0 +1,8 @@
+2025-10-31 23:39:15.183 +08:00 [WRN] Microsoft.AspNetCore.StaticFiles.StaticFileMiddleware The WebRootPath was not found: C:\code\SQLBox\src\SQLBox.Hosting\wwwroot. Static files may be unavailable.
+2025-10-31 23:39:15.300 +08:00 [WRN] Microsoft.AspNetCore.StaticFiles.StaticFileMiddleware The WebRootPath was not found: C:\code\SQLBox\src\SQLBox.Hosting\wwwroot. Static files may be unavailable.
+2025-10-31 23:39:15.431 +08:00 [INF] Microsoft.Hosting.Lifetime Now listening on: http://localhost:18080
+2025-10-31 23:39:15.433 +08:00 [INF] Microsoft.Hosting.Lifetime Now listening on: https://localhost:7014
+2025-10-31 23:39:15.441 +08:00 [INF] Microsoft.AspNetCore.Mvc.Infrastructure.DefaultActionDescriptorCollectionProvider No action descriptors found. This may indicate an incorrectly configured application or missing application parts. To learn more, visit https://aka.ms/aspnet/mvc/app-parts
+2025-10-31 23:39:15.566 +08:00 [INF] Microsoft.Hosting.Lifetime Application started. Press Ctrl+C to shut down.
+2025-10-31 23:39:15.567 +08:00 [INF] Microsoft.Hosting.Lifetime Hosting environment: Development
+2025-10-31 23:39:15.568 +08:00 [INF] Microsoft.Hosting.Lifetime Content root path: C:\code\SQLBox\src\SQLBox.Hosting

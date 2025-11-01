@@ -1,0 +1,11 @@
+{
+  "EmbeddingProviderId": "01be5420-f059-4b03-a4f4-beb7f622ebae",
+  "EmbeddingModel": "Qwen3-Embedding-0.6B",
+  "VectorDbPath": "Data Source=vectors.db",
+  "VectorCollection": "table_vectors",
+  "DistanceMetric": 2,
+  "AutoCreateCollection": true,
+  "VectorCacheExpireMinutes": null,
+  "DefaultChatProviderId": "01be5420-f059-4b03-a4f4-beb7f622ebae",
+  "DefaultChatModel": "gpt-5-mini"
+}

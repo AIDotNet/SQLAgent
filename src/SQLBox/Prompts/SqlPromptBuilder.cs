@@ -14,29 +14,41 @@ public sealed class SqlPromptBuilder : ISqlPromptBuilder
         string userQuestion,
         string dialect,
         SchemaContext schemaContext,
+        bool allowWrite,
         CancellationToken ct = default)
     {
-        return Task.FromResult(BuildPrompt(userQuestion, dialect, schemaContext));
+        return Task.FromResult(BuildPrompt(userQuestion, dialect, schemaContext, allowWrite));
     }
 
-    public string BuildPrompt(string userQuestion, string dialect, SchemaContext schemaContext)
+    public string BuildPrompt(string userQuestion, string dialect, SchemaContext schemaContext, bool allowWrite)
     {
-        var systemPrompt = BuildSystemPrompt(dialect);
+        var systemPrompt = BuildSystemPrompt(dialect, allowWrite);
         var schemaInfo = BuildSchemaInformation(schemaContext);
         var userPrompt = BuildUserPrompt(userQuestion, dialect, schemaContext, schemaInfo);
 
         return $"{systemPrompt}\n\n{schemaInfo}\n\n{userPrompt}";
     }
 
-    private string BuildSystemPrompt(string dialect)
+    private string BuildSystemPrompt(string dialect, bool allowWrite)
     {
         var dialectRules = GetDialectRules(dialect);
+
+        var security = allowWrite
+            ? """
+              Security Guidelines (Write-enabled):
+              - Write operations are allowed when explicitly requested:
+                INSERT, UPDATE, DELETE, and DDL (CREATE/ALTER/DROP TABLE)
+              - ALWAYS parameterize user inputs; never concatenate strings
+              - UPDATE/DELETE must include precise WHERE clauses to avoid full-table impact
+              - Consider transaction safety and idempotency when applicable
+              """
+            : PromptConstants.SecurityRestrictions;
 
         return $"{PromptConstants.SystemRoleDescription}\n\n" +
                $"{PromptConstants.SchemaAnalysisInstructions}\n\n" +
                $"{PromptConstants.SqlGenerationGuidelines}\n\n" +
                $"{dialectRules}\n\n" +
-               $"{PromptConstants.SecurityRestrictions}\n\n" +
+               $"{security}\n\n" +
                $"{PromptConstants.JsonOutputRequirements}";
     }
 

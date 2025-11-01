@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Database, Trash2, TestTube, Power } from 'lucide-react';
+import { Database, Trash2, TestTube, Power, RefreshCw, Rocket } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { connectionApi } from '@/services/api';
@@ -27,6 +27,20 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
 
   const testMutation = useMutation({
     mutationFn: connectionApi.test,
+  });
+
+  const initIndexMutation = useMutation({
+    mutationFn: () => connectionApi.initIndex(connection.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+    },
+  });
+
+  const updateIndexMutation = useMutation({
+    mutationFn: () => connectionApi.updateIndex(connection.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['connections'] });
+    },
   });
 
   const handleTest = () => {
@@ -82,12 +96,44 @@ export function ConnectionCard({ connection }: ConnectionCardProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="space-y-2">
+      <CardContent className="space-y-3">
         <div className="text-sm text-muted-foreground">
           {connection.description || '无描述'}
         </div>
-        <div className="text-xs text-muted-foreground font-mono bg-muted p-2 rounded">
+        <div className="text-xs text-muted-foreground font-mono bg-muted p-2 rounded break-all">
           {connection.connectionString}
+        </div>
+
+        {/* 向量索引状态 */}
+        <div className="flex items-center justify-between text-xs">
+          <div className={`px-2 py-1 rounded ${connection.vectorIndexInitialized ? 'bg-green-500/10 text-green-600' : 'bg-amber-500/10 text-amber-600'}`}>
+            {connection.vectorIndexInitialized ? `索引已初始化（${connection.vectorIndexCount ?? 0}）` : '索引未初始化'}
+          </div>
+          <div className="flex gap-2">
+            {!connection.vectorIndexInitialized ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => initIndexMutation.mutate()}
+                disabled={initIndexMutation.isPending}
+                title="初始化表向量索引"
+              >
+                <Rocket className="w-4 h-4 mr-1" />
+                {initIndexMutation.isPending ? '初始化中...' : '初始化索引'}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => updateIndexMutation.mutate()}
+                disabled={updateIndexMutation.isPending}
+                title="更新表向量索引"
+              >
+                <RefreshCw className="w-4 h-4 mr-1" />
+                {updateIndexMutation.isPending ? '更新中...' : '更新索引'}
+              </Button>
+            )}
+          </div>
         </div>
 
         {testMutation.data && (

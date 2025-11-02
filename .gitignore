@@ -5,3 +5,7 @@ riderModule.iml
 /_ReSharper.Caches/
 /.vs
 /node_modules
+src/SQLBox.Hosting/providers.json
+/src/SQLBox.Hosting/providers.json
+/src/SQLBox.Hosting/settings.json
+/src/SQLBox.Hosting/*.db

@@ -52,23 +52,6 @@ export function MessageList({ messages, isStreaming, onDeleteMessage }: MessageL
             onDelete={onDeleteMessage}
           />
         ))}
-        {isStreaming && (
-          <div className="flex gap-3 items-start">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-primary">
-              <Loader2 className="w-4 h-4 animate-spin text-primary-foreground" />
-            </div>
-            <div className="flex-1 pt-1">
-              <div className="text-sm text-muted-foreground flex items-center gap-2">
-                <span>AI 正在思考</span>
-                <span className="flex gap-1">
-                  <span className="animate-bounce" style={{ animationDelay: '0ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '150ms' }}>.</span>
-                  <span className="animate-bounce" style={{ animationDelay: '300ms' }}>.</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        )}
         <div ref={bottomRef} />
       </div>
     </div>

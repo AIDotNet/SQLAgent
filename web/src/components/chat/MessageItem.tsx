@@ -170,7 +170,7 @@ function SqlBlockRenderer({ block }: { block: SqlBlock }) {
         </div>
       </div>
       <div className="p-4">
-        <pre className="text-sm font-mono overflow-x-auto p-4 bg-muted rounded-lg border">
+        <pre className="text-sm font-mono overflow-x-auto p-4 bg-muted rounded-lg border scrollbar-thin max-h-[400px] overflow-y-auto">
           <code className="text-foreground">{block.sql}</code>
         </pre>
         {block.tables.length > 0 && (
@@ -206,10 +206,10 @@ function DataBlockRenderer({ block }: { block: DataBlock }) {
         </div>
       </div>
       <div className="p-4">
-        <div className="overflow-x-auto rounded-lg border">
+        <div className="overflow-x-auto rounded-lg border scrollbar-thin max-h-[500px]">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-muted border-b">
+            <thead className="sticky top-0 bg-muted z-10">
+              <tr className="border-b">
                 {block.columns.map((col) => (
                   <th key={col} className="px-4 py-3 text-left font-semibold whitespace-nowrap">
                     {col}
@@ -335,7 +335,7 @@ function ErrorBlockRenderer({ block }: { block: ErrorBlock }) {
             <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground transition-colors select-none">
               📋 查看详细信息
             </summary>
-            <pre className="mt-2 p-3 bg-muted rounded-lg border overflow-x-auto text-xs">
+            <pre className="mt-2 p-3 bg-muted rounded-lg border overflow-x-auto scrollbar-thin max-h-[300px] overflow-y-auto text-xs">
               <code>{block.details}</code>
             </pre>
           </details>

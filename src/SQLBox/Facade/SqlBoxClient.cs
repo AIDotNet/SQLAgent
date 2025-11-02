@@ -55,16 +55,13 @@ public class SqlBoxClient
                             """)
         ]);
 
-        await foreach (var item in chatCompletion.GetStreamingChatMessageContentsAsync(history,
-                           new OpenAIPromptExecutionSettings()
-                           {
-                               MaxTokens = _options.MaxOutputTokens,
-                               Temperature = 0.2f,
-                               ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
-                           }, kernel))
-        {
-            Console.Write(item.Content);
-        }
+        await chatCompletion.GetChatMessageContentsAsync(history,
+            new OpenAIPromptExecutionSettings()
+            {
+                MaxTokens = _options.MaxOutputTokens,
+                Temperature = 0.2f,
+                ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
+            }, kernel);
 
         // 判断SQL是否是查询
         if (_sqlTool.SqlBoxResult.IsQuery)
@@ -132,57 +129,71 @@ public class SqlBoxClient
 
             bool? any = _sqlTool.SqlBoxResult.Parameters.Any();
 
-            var userMessageText = $"""
-                                   Generate an ECharts option configuration for the following SQL query results.
+            var userMessageText = $$"""
+                                    Generate an ECharts option configuration for the following SQL query results.
 
-                                   # SQL Query Context
-                                   ```sql
-                                   {_sqlTool.SqlBoxResult.Sql}
-                                   ```
+                                    # SQL Query Context
+                                    ```sql
+                                    {{_sqlTool.SqlBoxResult.Sql}}
+                                    ```
 
-                                   # Query Parameters
-                                   {(any == true
-                                       ? string.Join("\n", _sqlTool.SqlBoxResult.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
-                                       : "No parameters")}
+                                    # Query Parameters
+                                    {{(any == true
+                                        ? string.Join("\n", _sqlTool.SqlBoxResult.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
+                                        : "No parameters")}}
 
-                                   # Data Structure Analysis
-                                   The query returns the following result set that needs visualization.
-                                   Analyze the SQL structure to infer:
-                                   1. Column names and data types
-                                   2. Aggregation patterns (SUM, COUNT, AVG, etc.)
-                                   3. Grouping dimensions
-                                   4. Temporal patterns (dates, timestamps)
+                                    # Data Structure Analysis
+                                    The query returns the following result set that needs visualization.
+                                    Analyze the SQL structure to infer:
+                                    1. Column names and data types
+                                    2. Aggregation patterns (SUM, COUNT, AVG, etc.)
+                                    3. Grouping dimensions
+                                    4. Temporal patterns (dates, timestamps)
 
-                                   # Output Requirements
-                                   Generate a complete ECharts option object with:
-                                   - Appropriate chart type based on data characteristics
-                                   - Complete axis configurations (if applicable)
-                                   - Series definitions with `{"{DATA_PLACEHOLDER}"}` for data injection
-                                   - Professional styling and interaction settings
+                                    # Output Requirements
+                                    Generate a complete ECharts option object with:
+                                    - Appropriate chart type based on data characteristics
+                                    - Complete axis configurations (if applicable)
+                                    - Series definitions with `{DATA_PLACEHOLDER}` for data injection
+                                    - Professional styling and interaction settings
 
-                                   # Data Injection Format
-                                   Use `{"{DATA_PLACEHOLDER}"}` where the C# code will inject actual data:
-                                   ```json
-                                   {"{"}
-                                     "xAxis": {"{"} "data": {"{DATA_PLACEHOLDER_X}"} {"}"},
-                                     "series": [{"{"} "data": {"{DATA_PLACEHOLDER_Y}"} {"}"}]
-                                   {"}"}
-                                   ```
-
-                                   Return ONLY the JSON option object, no additional text.
-                                   """;
-            echartsHistory.AddUserMessage(userMessageText);
-
-            await foreach (var item in chatCompletion.GetStreamingChatMessageContentsAsync(echartsHistory,
-                               new OpenAIPromptExecutionSettings()
-                               {
-                                   MaxTokens = _options.MaxOutputTokens,
-                                   Temperature = 0.2f,
-                                   ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
-                               }, kernel))
+                                    # Data Injection Format
+                                    Use `{DATA_PLACEHOLDER}` where the C# code will inject actual data:
+                                    ```json
+                                    {
+                                      "xAxis": {
+                                        "data": {DATA_PLACEHOLDER_X}
+                                      },
+                                      "series": [
+                                        {
+                                          "data": {DATA_PLACEHOLDER_Y}
+                                        }
+                                      ]
+                                    }
+                                    ```
+                                    Return ONLY the JSON option object, no additional text.
+                                    """;
+            echartsHistory.AddUserMessage(new ChatMessageContentItemCollection()
             {
-                Console.Write(item.Content);
-            }
+                new TextContent(userMessageText),
+                new TextContent(
+                    """
+                    <system-remind>
+                    This is a reminder. Your job is merely to assist users in generating ECharts options. If the task has nothing to do with ECharts, please respond politely with a rejection.
+                    - Always generate complete and valid ECharts option JSON.
+                    - Use the `{DATA_PLACEHOLDER}` format for data injection points.
+                    - It is necessary to use `echarts-Write` to store the generated ECharts options.
+                    </system-remind>
+                    """)
+            });
+
+            var result = await chatCompletion.GetChatMessageContentAsync(echartsHistory,
+                new OpenAIPromptExecutionSettings()
+                {
+                    MaxTokens = _options.MaxOutputTokens,
+                    Temperature = 0.2f,
+                    ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
+                }, kernel);
 
             // 获取生成的 ECharts option 并注入实际数据
             if (!string.IsNullOrWhiteSpace(echartsTool.EchartsOption) && value is { Length: > 0 })

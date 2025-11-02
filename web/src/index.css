@@ -118,3 +118,89 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* 自定义滚动条样式 */
+@layer utilities {
+  /* Webkit 浏览器（Chrome, Safari, Edge）滚动条样式 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent !important;
+  }
+
+  ::-webkit-scrollbar-track-piece {
+    background: transparent !important;
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: transparent !important;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.2);
+    border-radius: 9999px;
+    transition: background 0.2s;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.4);
+    background-clip: padding-box;
+  }
+
+  ::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--muted-foreground) / 0.6);
+    background-clip: padding-box;
+  }
+
+  /* 深色模式下的滚动条 */
+  .dark ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.25);
+    background-clip: padding-box;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.45);
+    background-clip: padding-box;
+  }
+
+  .dark ::-webkit-scrollbar-thumb:active {
+    background: hsl(var(--muted-foreground) / 0.65);
+    background-clip: padding-box;
+  }
+
+  /* Firefox 滚动条样式 */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.2) transparent;
+  }
+
+  .dark * {
+    scrollbar-color: hsl(var(--muted-foreground) / 0.25) transparent;
+  }
+
+  /* 细滚动条变体（用于表格等窄区域） */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  /* 隐藏滚动条但保持滚动功能 */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* 平滑滚动 */
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+}

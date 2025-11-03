@@ -3,7 +3,7 @@ using SQLAgent.Infrastructure;
 
 namespace SQLAgent.Facade;
 
-public class SqlBoxOptions
+public class SQLAgentOptions
 {
     /// <summary>
     /// AI 模型

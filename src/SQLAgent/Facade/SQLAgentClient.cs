@@ -13,9 +13,9 @@ using SQLAgent.Prompts;
 
 namespace SQLAgent.Facade;
 
-public class SqlBoxClient
+public class SQLAgentClient
 {
-    private readonly SqlBoxOptions _options;
+    private readonly SQLAgentOptions _options;
     private readonly string _systemPrompt;
     private readonly Kernel _kernel = null!;
     private readonly SqlTool _sqlResult;
@@ -26,7 +26,7 @@ public class SqlBoxClient
     /// <returns></returns>
     private readonly bool _useVectorSearch = false;
 
-    internal SqlBoxClient(SqlBoxOptions options, string systemPrompt)
+    internal SQLAgentClient(SQLAgentOptions options, string systemPrompt)
     {
         _options = options;
         _systemPrompt = systemPrompt;
@@ -37,7 +37,7 @@ public class SqlBoxClient
         _sqlResult = new SqlTool(this);
     }
 
-    public async Task<List<SqlBoxResult>> ExecuteAsync(ExecuteInput input)
+    public async Task<List<SQLAgentResult>> ExecuteAsync(ExecuteInput input)
     {
         var kernel = KernelFactory.CreateKernel(_options.Model, _options.APIKey, _options.Endpoint,
             (builder => { builder.Plugins.AddFromObject(_sqlResult, "sql"); }));
@@ -202,7 +202,7 @@ public class SqlBoxClient
     /// <summary>
     /// 使用 Dapper 执行 SQLite 参数化查询
     /// </summary>
-    private async Task<dynamic[]?> ExecuteSqliteQueryAsync(SqlBoxResult result)
+    private async Task<dynamic[]?> ExecuteSqliteQueryAsync(SQLAgentResult result)
     {
         try
         {
@@ -241,7 +241,7 @@ public class SqlBoxClient
     /// <summary>
     /// 使用 Dapper 执行 SQLite 参数化非查询操作（INSERT, UPDATE, DELETE, CREATE, DROP 等）
     /// </summary>
-    private async Task<int> ExecuteSqliteNonQueryAsync(SqlBoxResult result)
+    private async Task<int> ExecuteSqliteNonQueryAsync(SQLAgentResult result)
     {
         // 检查是否允许写操作
         if (!_options.AllowWrite)
@@ -392,9 +392,9 @@ public class SqlBoxClient
         }
     }
 
-    public class SqlTool(SqlBoxClient sqlBoxClient)
+    public class SqlTool(SQLAgentClient sqlAgentClient)
     {
-        public List<SqlBoxResult> SqlBoxResult = new();
+        public List<SQLAgentResult> SqlBoxResult = new();
 
         [KernelFunction("Write"), Description(
              """
@@ -420,7 +420,7 @@ public class SqlBoxClient
             [Description("Parameters for the SQL statement, if any")]
             SqlBoxParameter[]? parameters = null)
         {
-            var items = new SqlBoxResult
+            var items = new SQLAgentResult
             {
                 Sql = sql,
                 IsQuery = isQuery,
@@ -457,7 +457,7 @@ public class SqlBoxClient
 
             try
             {
-                await using var connection = new SqliteConnection(sqlBoxClient._options.ConnectionString);
+                await using var connection = new SqliteConnection(sqlAgentClient._options.ConnectionString);
                 await connection.OpenAsync();
 
                 string sql;
@@ -542,7 +542,7 @@ public class SqlBoxClient
 
             try
             {
-                await using var connection = new SqliteConnection(sqlBoxClient._options.ConnectionString);
+                await using var connection = new SqliteConnection(sqlAgentClient._options.ConnectionString);
                 await connection.OpenAsync();
 
                 var master = await connection.QueryFirstOrDefaultAsync(

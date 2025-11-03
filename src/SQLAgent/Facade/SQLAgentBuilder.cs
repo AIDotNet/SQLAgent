@@ -3,13 +3,13 @@ using SQLAgent.Infrastructure;
 
 namespace SQLAgent.Facade;
 
-public class SqlBoxBuilder
+public class SQLAgentBuilder
 {
-    private readonly SqlBoxOptions _options = new();
+    private readonly SQLAgentOptions _options = new();
 
     private string _sqlBotSystemPrompt = string.Empty;
 
-    public SqlBoxClient Build()
+    public SQLAgentClient Build()
     {
         if (string.IsNullOrEmpty(_sqlBotSystemPrompt))
         {
@@ -31,8 +31,8 @@ public class SqlBoxBuilder
                 "Database configuration is incomplete. Please call WithDatabaseType before building the client.");
         }
 
-        // Configure the SqlBoxClient with the options and system prompt
-        return new SqlBoxClient(_options, _sqlBotSystemPrompt);
+        // Configure the SQLAgentClient with the options and system prompt
+        return new SQLAgentClient(_options, _sqlBotSystemPrompt);
     }
 
     public void WithDatabaseType(SqlType sqlType, string connectionString)
@@ -74,7 +74,7 @@ public class SqlBoxBuilder
 
     public void WithSqlBotSystemPrompt(SqlType sqlType)
     {
-        // This method can be expanded to configure the SqlBoxClient with the system prompt
+        // This method can be expanded to configure the SQLAgentClient with the system prompt
         _sqlBotSystemPrompt = $"""
                                You are a professional SQL engineer specializing in {sqlType} database systems.
 

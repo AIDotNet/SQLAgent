@@ -285,7 +285,7 @@ public class ChatService(
                                            input.Messages.LastOrDefault(m => m.Role.ToLower() == "user")?.Content ??
                                            "未知查询";
 
-                            var sqlBoxBuilder = new SqlBoxBuilder();
+                            var sqlBoxBuilder = new SQLAgentBuilder();
                             sqlBoxBuilder.WithDatabaseType(SqlType.Sqlite, connection.ConnectionString);
                             sqlBoxBuilder.WithLLMProvider(input.Model, provider.ApiKey, provider.Endpoint ?? "",
                                 provider.Type);

@@ -1,6 +1,6 @@
 ﻿namespace SQLAgent.Model;
 
-public class SqlBoxText
+public class SQLAgentText
 {
     public string Type { get; set; }
 

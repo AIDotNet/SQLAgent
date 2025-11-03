@@ -2,7 +2,7 @@
 
 namespace SQLAgent.Model;
 
-public class SqlBoxResult
+public class SQLAgentResult
 {
     public string Sql { get; set; } = string.Empty;
 

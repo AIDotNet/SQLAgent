@@ -287,11 +287,10 @@ public class ChatService(
 
                             var serviceCollection = new ServiceCollection();
 
-                            var sqlBoxBuilder = new SQLAgentBuilder(serviceCollection);
-                            sqlBoxBuilder
+                            var sqlBotBuilder = new SQLAgentBuilder(serviceCollection);
+                            sqlBotBuilder
                                 .WithDatabaseType(connection.SqlType, connection.ConnectionString)
                                 .WithLLMProvider(input.Model, provider.ApiKey, provider.Endpoint ?? "", provider.Type)
-                                .WithSqlBotSystemPrompt(connection.SqlType)
                                 .Build();
 
                             var serviceProvider = serviceCollection.BuildServiceProvider();

@@ -8,5 +8,7 @@ riderModule.iml
 src/SQLBox.Hosting/providers.json
 /src/SQLBox.Hosting/providers.json
 /src/SQLBox.Hosting/settings.json
-/src/SQLBox.Hosting/*.db
+*.db
 /.idea
+
+*.txt

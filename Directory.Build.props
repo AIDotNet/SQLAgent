@@ -1,0 +1,41 @@
+<Project>
+    <PropertyGroup>
+        <!-- Version and Package Info -->
+        <Version>0.1.0</Version>
+        <AssemblyVersion>$(Version)</AssemblyVersion>
+        <FileVersion>$(Version)</FileVersion>
+        <Authors>AIDotNet</Authors>
+        <Company>AIDotNet</Company>
+        <Product>SQLAgent</Product>
+        <Description>SQLAgent - AI-powered SQL query generation and database schema analysis</Description>
+        <RepositoryUrl>https://github.com/AIDotNet/SQLAgent</RepositoryUrl>
+        <RepositoryType>git</RepositoryType>
+        <PackageProjectUrl>$(RepositoryUrl)</PackageProjectUrl>
+        <PackageLicenseExpression>MIT</PackageLicenseExpression>
+        
+        <!-- Language Features -->
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        
+        <!-- Code Analysis -->
+        <EnableNETAnalyzers>true</EnableNETAnalyzers>
+        <AnalysisLevel>latest</AnalysisLevel>
+        <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+        <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+        
+        <!-- Build Output -->
+        <GenerateDocumentationFile>true</GenerateDocumentationFile>
+        <PublishRepositoryUrl>true</PublishRepositoryUrl>
+        <EmbedUntrackedSources>true</EmbedUntrackedSources>
+        <DebugType>embedded</DebugType>
+        
+        <!-- Deterministic Build -->
+        <Deterministic>true</Deterministic>
+    </PropertyGroup>
+
+    <!-- Source Link for debugging -->
+    <ItemGroup>
+        <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
+    </ItemGroup>
+</Project>

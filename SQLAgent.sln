@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.0.11123.170 d18.0
+VisualStudioVersion = 18.0.11123.170
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{38222B7B-8BA9-4036-B784-788EB3CDD4D8}"
 EndProject
@@ -9,12 +9,14 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLAgent", "src\SQLAgent\SQ
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLAgent.Hosting", "src\SQLAgent.Hosting\SQLAgent.Hosting.csproj", "{0E0B7267-748E-44FE-BE5E-41B5E097099F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLAgent.ServiceDefaults", "src\SQLAgent.ServiceDefaults\SQLAgent.ServiceDefaults.csproj", "{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}"
-EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{D32CC390-7737-4CCB-976D-3399B1EBF633}"
 	ProjectSection(SolutionItems) = preProject
 		Directory.Build.props = Directory.Build.props
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLAgent.AppHost", "src\SQLAgent.AppHost\SQLAgent.AppHost.csproj", "{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SQLAgent.ServiceDefaults", "src\SQLAgent.ServiceDefaults\SQLAgent.ServiceDefaults.csproj", "{956FC473-7A4C-4121-5A26-6B0E79A51997}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -50,18 +52,30 @@ Global
 		{0E0B7267-748E-44FE-BE5E-41B5E097099F}.Release|x64.Build.0 = Release|Any CPU
 		{0E0B7267-748E-44FE-BE5E-41B5E097099F}.Release|x86.ActiveCfg = Release|Any CPU
 		{0E0B7267-748E-44FE-BE5E-41B5E097099F}.Release|x86.Build.0 = Release|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Debug|x64.Build.0 = Debug|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Debug|x86.Build.0 = Debug|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Release|Any CPU.Build.0 = Release|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Release|x64.ActiveCfg = Release|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Release|x64.Build.0 = Release|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Release|x86.ActiveCfg = Release|Any CPU
-		{7511B4A4-5F5E-C75B-92F5-BC74D4860FF2}.Release|x86.Build.0 = Release|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Debug|x64.Build.0 = Debug|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Debug|x86.Build.0 = Debug|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Release|Any CPU.Build.0 = Release|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Release|x64.ActiveCfg = Release|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Release|x64.Build.0 = Release|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Release|x86.ActiveCfg = Release|Any CPU
+		{17CBAC0A-C129-4E3E-9A30-7C6E16EA8A90}.Release|x86.Build.0 = Release|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Debug|x64.Build.0 = Debug|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Debug|x86.Build.0 = Debug|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Release|Any CPU.Build.0 = Release|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Release|x64.ActiveCfg = Release|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Release|x64.Build.0 = Release|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Release|x86.ActiveCfg = Release|Any CPU
+		{956FC473-7A4C-4121-5A26-6B0E79A51997}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -69,5 +83,8 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{64CC0D0F-5E98-455C-9AF1-D863D2D59AB5} = {38222B7B-8BA9-4036-B784-788EB3CDD4D8}
 		{0E0B7267-748E-44FE-BE5E-41B5E097099F} = {38222B7B-8BA9-4036-B784-788EB3CDD4D8}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {2887E959-D5C6-4FB0-A703-EE74919B34C4}
 	EndGlobalSection
 EndGlobal

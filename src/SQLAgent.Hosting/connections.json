@@ -1,12 +1,11 @@
 [
   {
-    "Id": "1e8ed098-0f23-4ef3-a8a3-ac86ab2dc97a",
-    "Name": "测试",
-    "DatabaseType": "postgresql",
-    "SqlType": 1,
-    "ConnectionString": "Host=token-database.postgres.database.azure.com;Port=5432;Database=koala-wiki;Username=aidotnet;Password=Aa010426.;",
+    "Id": "f850d2f7-6956-4f38-a149-1d7303e4ee4e",
+    "Name": "\u6D4B\u8BD5",
+    "DatabaseType": "sqlite",
+    "ConnectionString": "Data Source=sqlbox.db",
     "Description": "",
-    "CreatedAt": "2025-11-12T04:02:22.5687195Z",
+    "CreatedAt": "2025-10-31T17:24:37.2730742Z",
     "UpdatedAt": null,
     "IsEnabled": true,
     "Metadata": null

@@ -17,6 +17,7 @@ public class PostgreSQLDatabaseService(SQLAgentOptions options) : IDatabaseServi
         return new NpgsqlConnection(options.ConnectionString);
     }
 
+    /// <inheritdoc />
     public async Task<string> SearchTables(string[] keywords, int maxResults = 20)
     {
         using var connection = GetConnection();

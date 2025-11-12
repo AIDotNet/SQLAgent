@@ -306,15 +306,62 @@ public class ChatService(
                             {
                                 // 发送 SQL 块
                                 await SendSqlBlockAsync(context, [sqlBoxResult.Sql], []);
-                                // 如果有 ECharts 配置，发送图表块
-                                if (!string.IsNullOrEmpty(sqlBoxResult.EchartsOption))
+                                if (sqlBoxResult.ExecuteType == SqlBoxExecuteType.EChart)
                                 {
-                                    var chartBlock = new ChartBlock
+                                    // 如果有 ECharts 配置，发送图表块
+                                    if (!string.IsNullOrEmpty(sqlBoxResult.EchartsOption))
                                     {
-                                        ChartType = "echarts",
-                                        EchartsOption = sqlBoxResult.EchartsOption
-                                    };
-                                    await SendBlockAsync(context, chartBlock);
+                                        var chartBlock = new ChartBlock
+                                        {
+                                            ChartType = "echarts",
+                                            EchartsOption = sqlBoxResult.EchartsOption
+                                        };
+                                        await SendBlockAsync(context, chartBlock);
+                                    }
+                                }
+                                else if (sqlBoxResult.ExecuteType == SqlBoxExecuteType.Query)
+                                {
+                                    // 发送查询结果数据
+                                    if (sqlBoxResult.Result != null && sqlBoxResult.Result.Length > 0)
+                                    {
+                                        // 提取列名和数据行
+                                        var firstRow = sqlBoxResult.Result[0];
+                                        string[] columns;
+                                        object[][] rows;
+
+                                        if (firstRow is IDictionary<string, object> dict)
+                                        {
+                                            // 从第一行数据中获取列名
+                                            columns = dict.Keys.ToArray();
+
+                                            // 转换所有行数据为二维数组
+                                            rows = sqlBoxResult.Result
+                                                .Select(row =>
+                                                {
+                                                    if (row is IDictionary<string, object> rowDict)
+                                                    {
+                                                        return columns.Select(col => 
+                                                            rowDict.TryGetValue(col, out var value) ? value : (object)null!)
+                                                            .ToArray();
+                                                    }
+                                                    return Array.Empty<object>();
+                                                })
+                                                .ToArray();
+                                        }
+                                        else
+                                        {
+                                            // 如果数据格式不是字典，尝试从 Columns 属性获取列名
+                                            columns = sqlBoxResult.Columns?.Keys.ToArray() ?? Array.Empty<string>();
+                                            rows = Array.Empty<object[]>();
+                                        }
+
+                                        // 发送数据块
+                                        await SendDataBlockAsync(context, columns, rows, sqlBoxResult.Result.Length);
+                                    }
+                                }
+                                else
+                                {
+                                    // 其他执行类型暂不处理
                                 }
                             }
 
@@ -326,6 +373,9 @@ public class ChatService(
                                  {result.Select(r => r.Sql).Aggregate((a, b) => a + "\n" + b)}
                                  </code>
                                  Note: The operation has been completed. This is just a reminder.
+                                 - Do not directly disclose the content of the SQL to the users.
+                                 - Always explain the purpose and effect of the SQL in simple terms.
+                                 - Current query quantity:{result.Select(x => x.Result.Length).Sum()}
                                  </system-remind>
                                  """
                             ));

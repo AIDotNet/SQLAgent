@@ -20,7 +20,7 @@ public class SQLAgentClient
     private static readonly ActivitySource ActivitySource = new("SQLAgent");
 
     private readonly SQLAgentOptions _options;
-    internal readonly IDatabaseService _databaseService;
+    private readonly IDatabaseService _databaseService;
     private readonly ILogger<SQLAgentClient> _logger;
     private readonly SqlTool _sqlResult;
 
@@ -67,6 +67,8 @@ public class SQLAgentClient
                              <user-env>
                              {(_options.AllowWrite ? "The user has granted you the permission to directly manipulate the database, including creating, updating and deleting records." : "Database write operations are NOT allowed.")}
                              The database type is {_options.SqlType}.
+                             CRITICAL: When calling sql-Write with executeType=Query or executeType=EChart, 
+                             you MUST provide the 'columns' parameter with all SELECT columns.
                              <user-env>
                              """)
         ]);
@@ -81,145 +83,159 @@ public class SQLAgentClient
                 ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
             }, kernel);
 
-        _logger.LogInformation("AI model call completed, processing {Count} SQL results", _sqlResult.SqlBoxResult.Count);
+        _logger.LogInformation("AI model call completed, processing {Count} SQL results",
+            _sqlResult.SqlBoxResult.Count);
 
         foreach (var _sqlTool in _sqlResult.SqlBoxResult)
         {
-            _logger.LogInformation("Processing SQL result: IsQuery={IsQuery}, SQL={Sql}", _sqlTool.IsQuery, _sqlTool.Sql);
+            _logger.LogInformation("Processing SQL result: executeType={executeType}, SQL={Sql}", _sqlTool.ExecuteType,
+                _sqlTool.Sql);
 
-            // 判断SQL是否是查询
-            if (_sqlTool.IsQuery)
+            switch (_sqlTool.ExecuteType)
             {
-                var echartsTool = new EchartsTool();
-                var value = await ExecuteSqliteQueryAsync(_sqlTool);
+                // 判断SQL是否是查询
+                case SqlBoxExecuteType.EChart:
+                {
+                    var echartsTool = new EchartsTool();
+                    var value = await ExecuteSqliteQueryAsync(_sqlTool);
 
-                kernel = KernelFactory.CreateKernel(_options.Model, _options.APIKey, _options.Endpoint,
-                    (builder => { builder.Plugins.AddFromObject(echartsTool, "echarts"); }), _options.AIProvider);
-                chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
+                    kernel = KernelFactory.CreateKernel(_options.Model, _options.APIKey, _options.Endpoint,
+                        (builder => { builder.Plugins.AddFromObject(echartsTool, "echarts"); }), _options.AIProvider);
+                    chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
 
-                var echartsHistory = new ChatHistory();
-                echartsHistory.AddSystemMessage(PromptConstants.SQLGeneratorEchartsDataPrompt);
+                    var echartsHistory = new ChatHistory();
+                    echartsHistory.AddSystemMessage(PromptConstants.SQLGeneratorEchartsDataPrompt);
 
-                bool? any = _sqlTool.Parameters.Any();
+                    bool? any = _sqlTool.Parameters.Count != 0;
 
-                var userMessageText = $$"""
-                                        Generate an ECharts option configuration for the following SQL query results.
+                    var userMessageText = $$"""
+                                            Generate an ECharts option configuration for the following SQL query results.
 
-                                        # User's Original Query
-                                        "{{input.Query}}"
+                                            # User's Original Query
+                                            "{{input.Query}}"
 
-                                        # SQL Query Context
-                                        ```sql
-                                        {{_sqlTool.Sql}}
-                                        ```
+                                            # SQL Query Context
+                                            ```sql
+                                            {{_sqlTool.Sql}}
+                                            ```
 
-                                        # Query Parameters
-                                        {{(any == true
-                                            ? string.Join("\n", _sqlTool.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
-                                            : "No parameters")}}
+                                            # Query Parameters
+                                            {{(any == true
+                                                ? string.Join("\n", _sqlTool.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
+                                                : "No parameters")}}
 
-                                        # Data Structure Analysis
-                                        The query returns the following result set that needs visualization.
-                                        Analyze the SQL structure to infer:
-                                        1. Column names and data types
-                                        2. Aggregation patterns (SUM, COUNT, AVG, etc.)
-                                        3. Grouping dimensions
-                                        4. Temporal patterns (dates, timestamps)
+                                            # Data Structure Analysis
+                                            The query returns the following result set that needs visualization.
+                                            Analyze the SQL structure to infer:
+                                            1. Column names and data types
+                                            2. Aggregation patterns (SUM, COUNT, AVG, etc.)
+                                            3. Grouping dimensions
+                                            4. Temporal patterns (dates, timestamps)
 
-                                        # Language Requirement (CRITICAL)
-                                        DETECT the language from the user's original query above and use THE SAME LANGUAGE for ALL text in the chart:
-                                        - Title, subtitle
-                                        - Axis names and labels
-                                        - Legend items
-                                        - Tooltip content
-                                        - All other text elements
-                                        Example: If user query is in Chinese, generate Chinese title like "销售数据分析"; if English, use "Sales Data Analysis"
+                                            # Language Requirement (CRITICAL)
+                                            DETECT the language from the user's original query above and use THE SAME LANGUAGE for ALL text in the chart:
+                                            - Title, subtitle
+                                            - Axis names and labels
+                                            - Legend items
+                                            - Tooltip content
+                                            - All other text elements
+                                            Example: If user query is in Chinese, generate Chinese title like "销售数据分析"; if English, use "Sales Data Analysis"
 
-                                        # Output Requirements
-                                        Generate a complete ECharts option object with:
-                                        - Appropriate chart type based on data characteristics
-                                        - Complete axis configurations with proper styling (if applicable)
-                                        - Series definitions with `{DATA_PLACEHOLDER}` for data injection
-                                        - Modern, beautiful visual design (colors, shadows, rounded corners, gradients)
-                                        - Professional styling and interaction settings
-                                        - All text elements in the SAME language as user's query
+                                            # Output Requirements
+                                            Generate a complete ECharts option object with:
+                                            - Appropriate chart type based on data characteristics
+                                            - Complete axis configurations with proper styling (if applicable)
+                                            - Series definitions with `{DATA_PLACEHOLDER}` for data injection
+                                            - Modern, beautiful visual design (colors, shadows, rounded corners, gradients)
+                                            - Professional styling and interaction settings
+                                            - All text elements in the SAME language as user's query
 
-                                        # Visual Styling Requirements
-                                        Apply modern design principles:
-                                        - Use vibrant color palette with gradients where appropriate
-                                        - Add subtle shadows (shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.1)')
-                                        - Apply borderRadius (6-8) to bars for rounded appearance
-                                        - Use smooth curves (smooth: true) for line charts
-                                        - Configure rich tooltips with background styling
-                                        - Set proper grid margins (60-80px) for labels
-                                        - Include animation settings (duration: 1000-1200ms)
+                                            # Visual Styling Requirements
+                                            Apply modern design principles:
+                                            - Use vibrant color palette with gradients where appropriate
+                                            - Add subtle shadows (shadowBlur: 8, shadowColor: 'rgba(0,0,0,0.1)')
+                                            - Apply borderRadius (6-8) to bars for rounded appearance
+                                            - Use smooth curves (smooth: true) for line charts
+                                            - Configure rich tooltips with background styling
+                                            - Set proper grid margins (60-80px) for labels
+                                            - Include animation settings (duration: 1000-1200ms)
 
-                                        # Data Injection Format
-                                        Use `{DATA_PLACEHOLDER}` where the C# code will inject actual data:
-                                        ```js
-                                        {
-                                        "tooltip": {
-                                          "trigger": "axis",
-                                          "formatter": function(params) { return params[0].name + ': ' + params[0].value; }
-                                        },
-                                        "xAxis": {
-                                          "data": {DATA_PLACEHOLDER_X}
-                                        },
-                                        "series": [
-                                          {
-                                            "data": {DATA_PLACEHOLDER_Y}
-                                          }
-                                        ]
-                                        }
-                                        ```
-                                        Return ONLY the JSON option object, no additional text.
-                                        """;
-                echartsHistory.AddUserMessage([
-                    new TextContent(userMessageText),
-                    new TextContent(
-                        """
-                        <system-remind>
-                        This is a reminder. Your job is merely to assist users in generating ECharts options. If the task has nothing to do with ECharts, please respond politely with a rejection.
-                        - Always generate complete and valid ECharts option JSON.
-                        - Use the `{DATA_PLACEHOLDER}` format for data injection points.
-                        - It is necessary to use `echarts-Write` to store the generated ECharts options.
-                        </system-remind>
-                        """)
-                ]);
+                                            # Data Injection Format
+                                            Use `{DATA_PLACEHOLDER}` where the C# code will inject actual data:
+                                            ```js
+                                            {
+                                            "tooltip": {
+                                              "trigger": "axis",
+                                              "formatter": function(params) { return params[0].name + ': ' + params[0].value; }
+                                            },
+                                            "xAxis": {
+                                              "data": {DATA_PLACEHOLDER_X}
+                                            },
+                                            "series": [
+                                              {
+                                                "data": {DATA_PLACEHOLDER_Y}
+                                              }
+                                            ]
+                                            }
+                                            ```
+                                            Return ONLY the JSON option object, no additional text.
+                                            """;
+                    echartsHistory.AddUserMessage([
+                        new TextContent(userMessageText),
+                        new TextContent(
+                            """
+                            <system-remind>
+                            This is a reminder. Your job is merely to assist users in generating ECharts options. If the task has nothing to do with ECharts, please respond politely with a rejection.
+                            - Always generate complete and valid ECharts option JSON.
+                            - Use the `{DATA_PLACEHOLDER}` format for data injection points.
+                            - It is necessary to use `echarts-Write` to store the generated ECharts options.
+                            </system-remind>
+                            """)
+                    ]);
 
-                _logger.LogInformation("Generating ECharts option for SQL query");
+                    _logger.LogInformation("Generating ECharts option for SQL query");
 
-                var result = await chatCompletion.GetChatMessageContentAsync(echartsHistory,
-                    new OpenAIPromptExecutionSettings()
+                    var result = await chatCompletion.GetChatMessageContentAsync(echartsHistory,
+                        new OpenAIPromptExecutionSettings()
+                        {
+                            MaxTokens = _options.MaxOutputTokens,
+                            Temperature = 0.2f,
+                            ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
+                        }, kernel);
+
+                    // 获取生成的 ECharts option 并注入实际数据
+                    if (!string.IsNullOrWhiteSpace(echartsTool.EchartsOption) && value is { Length: > 0 })
                     {
-                        MaxTokens = _options.MaxOutputTokens,
-                        Temperature = 0.2f,
-                        ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
-                    }, kernel);
+                        var processedOption = InjectDataIntoEchartsOption(echartsTool.EchartsOption, value);
+                        echartsTool.EchartsOption = processedOption;
 
-                // 获取生成的 ECharts option 并注入实际数据
-                if (!string.IsNullOrWhiteSpace(echartsTool.EchartsOption) && value is { Length: > 0 })
-                {
-                    var processedOption = InjectDataIntoEchartsOption(echartsTool.EchartsOption, value);
-                    echartsTool.EchartsOption = processedOption;
+                        // 将 ECharts option 保存到结果对象中
+                        _sqlTool.EchartsOption = processedOption;
 
-                    // 将 ECharts option 保存到结果对象中
-                    _sqlTool.EchartsOption = processedOption;
+                        _logger.LogInformation("ECharts option generated and data injected successfully");
+                    }
+                    else
+                    {
+                        _logger.LogWarning("No ECharts option generated or no query results to inject");
+                    }
 
-                    _logger.LogInformation("ECharts option generated and data injected successfully");
+                    break;
                 }
-                else
+                case SqlBoxExecuteType.Query:
                 {
-                    _logger.LogWarning("No ECharts option generated or no query results to inject");
+                    var value = await ExecuteSqliteQueryAsync(_sqlTool);
+
+                    _sqlTool.Result = value;
+                    break;
                 }
-            }
-            else
-            {
-                await ExecuteSqliteNonQueryAsync(_sqlTool);
+                default:
+                    await ExecuteSqliteNonQueryAsync(_sqlTool);
+                    break;
             }
         }
 
-        _logger.LogInformation("SQL Agent execution completed, returning {Count} results", _sqlResult.SqlBoxResult.Count);
+        _logger.LogInformation("SQL Agent execution completed, returning {Count} results",
+            _sqlResult.SqlBoxResult.Count);
 
         return _sqlResult.SqlBoxResult;
     }
@@ -281,7 +297,8 @@ public class SQLAgentClient
             // 使用 Dapper 执行参数化非查询操作
             var affectedRows = await _databaseService.ExecuteSqliteNonQueryAsync(result.Sql, result.Parameters);
 
-            _logger.LogInformation("Non-query operation executed successfully, affected {AffectedRows} rows", affectedRows);
+            _logger.LogInformation("Non-query operation executed successfully, affected {AffectedRows} rows",
+                affectedRows);
             return affectedRows;
         }
         catch (Exception ex)
@@ -304,7 +321,8 @@ public class SQLAgentClient
 
         if (string.IsNullOrWhiteSpace(optionTemplate) || queryResults == null || queryResults.Length == 0)
         {
-            _logger.LogWarning("Invalid input for data injection: optionTemplate is empty or queryResults is null/empty");
+            _logger.LogWarning(
+                "Invalid input for data injection: optionTemplate is empty or queryResults is null/empty");
             return optionTemplate;
         }
 
@@ -421,15 +439,30 @@ public class SQLAgentClient
             string sql,
             [Description("If it is not possible to generate a SQL-friendly version, inform the user accordingly.")]
             string? errorMessage,
-            [Description("Indicates whether the SQL is a query statement")]
-            bool isQuery,
+            [Description("Indicate the type of SQL currently being executed.")]
+            SqlBoxExecuteType executeType,
+            [Description("Columns involved in the SQL statement, if any")]
+            Dictionary<string, string>? columns = null,
             [Description("Parameters for the SQL statement, if any")]
             SqlBoxParameter[]? parameters = null)
         {
+            // 验证：Query 和 EChart 类型必须提供 columns
+            if (executeType is SqlBoxExecuteType.Query or SqlBoxExecuteType.EChart
+                && (columns == null || columns.Count == 0))
+            {
+                return """
+                       <system-error>
+                       ERROR: When executeType is Query or EChart, the 'columns' parameter is REQUIRED.
+                       Please specify all columns that appear in the SELECT clause.
+                       </system-error>
+                       """;
+            }
+
             var items = new SQLAgentResult
             {
                 Sql = sql,
-                IsQuery = isQuery,
+                Columns = columns,
+                ExecuteType = executeType,
                 ErrorMessage = errorMessage,
                 Parameters = parameters?.ToList() ?? new List<SqlBoxParameter>()
             };
@@ -497,7 +530,7 @@ public class SQLAgentClient
             try
             {
                 var result = await sqlAgentClient._databaseService.GetTableSchema(tableName);
-                return JsonSerializer.Serialize(result,SQLAgentJsonOptions.DefaultOptions);
+                return JsonSerializer.Serialize(result, SQLAgentJsonOptions.DefaultOptions);
             }
             catch (Exception ex)
             {

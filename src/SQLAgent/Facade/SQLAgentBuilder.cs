@@ -12,12 +12,6 @@ public class SQLAgentBuilder(IServiceCollection service)
 
     public void Build()
     {
-        if (string.IsNullOrEmpty(_options.SqlBotSystemPrompt))
-        {
-            throw new InvalidOperationException(
-                "SQL Bot system prompt is not configured. Please call WithSqlBotSystemPrompt before building the client.");
-        }
-
         if (string.IsNullOrEmpty(_options.Model) ||
             string.IsNullOrEmpty(_options.APIKey) ||
             string.IsNullOrEmpty(_options.Endpoint))
@@ -70,6 +64,8 @@ public class SQLAgentBuilder(IServiceCollection service)
 
                                        Generate direct, executable SQL without requesting clarification or confirmation.
                                        """;
+
+        service.AddLogging();
 
         // Configure the SQLAgentClient with the options and system prompt
         service.AddSingleton<SQLAgentOptions>(_ => _options);

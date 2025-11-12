@@ -1,13 +1,12 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Scalar.AspNetCore;
 using Serilog;
-using SQLAgent.Facade;
 using SQLAgent.Hosting.Dto;
 using SQLAgent.Hosting.Extensions;
 using SQLAgent.Hosting.Services;
 using SQLAgent.Infrastructure;
 using SQLAgent.Infrastructure.Defaults;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 

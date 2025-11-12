@@ -32,7 +32,9 @@ public class PostgreSQLDatabaseService(SQLAgentOptions options) : IDatabaseServi
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
                   AND c.relkind IN ('r','p','v','m','f')
-                ORDER BY n.nspname, c.relname
+                                -- ORDER BY 里使用未在 SELECT DISTINCT 结果集中出现的表达式会导致 PostgreSQL 错误 42P10。
+                                -- 改为按已选出的别名 name 排序。
+                                ORDER BY name
                 LIMIT @maxResults;";
             dp.Add("maxResults", maxResults);
         }
@@ -61,7 +63,7 @@ public class PostgreSQLDatabaseService(SQLAgentOptions options) : IDatabaseServi
                 WHERE n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
                   AND c.relkind IN ('r','p','v','m','f')
                   AND ({string.Join(" OR ", conds)})
-                ORDER BY n.nspname, c.relname
+                                ORDER BY name
                 LIMIT @maxResults;";
             dp.Add("maxResults", maxResults);
         }

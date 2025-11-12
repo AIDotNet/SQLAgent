@@ -11,11 +11,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="9.5.2" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\SQLAgent.Hosting\SQLAgent.Hosting.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0" />
   </ItemGroup>
 
 </Project>

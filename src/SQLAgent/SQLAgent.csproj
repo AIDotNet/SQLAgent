@@ -8,13 +8,14 @@
 
   <ItemGroup>
       <PackageReference Include="Dapper" Version="2.1.66" />
-      <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.2" />
-      <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0-rc.2.25502.107" />
-      <PackageReference Include="Microsoft.Extensions.AI" Version="9.10.2" />
-      <PackageReference Include="Microsoft.SemanticKernel.Connectors.SqliteVec" Version="1.66.0-preview" />
+      <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0-preview2.25289.6" />
+      <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+      <PackageReference Include="Microsoft.Extensions.AI" Version="10.0.0" />
+      <PackageReference Include="Microsoft.Extensions.Logging" Version="10.0.0" />
+      <PackageReference Include="Microsoft.SemanticKernel.Connectors.SqliteVec" Version="1.67.1-preview" />
       <PackageReference Include="MySql.Data" Version="9.5.0" />
-      <PackageReference Include="Npgsql" Version="9.0.4" />
-      <PackageReference Include="Microsoft.SemanticKernel" Version="1.66.0" />
+      <PackageReference Include="Npgsql" Version="10.0.0-rc.1" />
+      <PackageReference Include="Microsoft.SemanticKernel" Version="1.67.1" />
       <PackageReference Update="Microsoft.SourceLink.GitHub" Version="8.0.0" />
     </ItemGroup>
 

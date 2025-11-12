@@ -1,3 +1,3 @@
 {
-  "appHostPath": "../src/SQLBox.AppHost/SQLBox.AppHost.csproj"
+  "appHostPath": "../src/SQLAgent.AppHost/SQLAgent.AppHost.csproj"
 }

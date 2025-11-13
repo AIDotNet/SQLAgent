@@ -22,6 +22,6 @@ public class ThinkTool
             "A thought to think about. This can be structured reasoning, step-by-step analysis, policy verification, or any other mental process that helps with problem-solving.")]
         string thought)
     {
-        return thought;
+        return "<system-think>\n" + thought + "\n</system-think>";
     }
 }

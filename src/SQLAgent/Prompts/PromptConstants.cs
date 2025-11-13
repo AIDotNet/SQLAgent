@@ -412,11 +412,10 @@ public static class PromptConstants
          # Output Instructions
          
          After analyzing the database schema:
-         1. First, use the `Think` tool to plan your documentation structure
-         2. Generate the complete knowledge base following the exact structure above
-         3. Ensure all sections are present and properly formatted
-         4. Use Markdown with proper heading hierarchy (# ## ### format)
-         5. **MANDATORY**: Call the `Write` tool with the complete Markdown content
+         1. Generate the complete knowledge base following the exact structure above
+         2. Ensure all sections are present and properly formatted
+         3. Use Markdown with proper heading hierarchy (# ## ### format)
+         4. **MANDATORY**: Call the `Write` tool with the complete Markdown content
          
          ⚠️ CRITICAL: You MUST call the `Write` tool to complete this task. Simply generating text output without calling the tool is considered task failure.
          

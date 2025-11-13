@@ -79,10 +79,6 @@ public class SQLAgentClient
             {
                 Name = "Write"
             }));
-        options.ChatOptions.Tools.Add(AIFunctionFactory.Create(ThinkTool.Think, new AIFunctionFactoryOptions()
-        {
-            Name = "Think"
-        }));
 
         var agent = _chatClient.CreateAIAgent(options);
 
@@ -111,10 +107,10 @@ public class SQLAgentClient
                                  - **Task**: Generate AI-consumable database knowledge base
 
                                  # Workflow Instructions (MANDATORY - Follow All Steps)
-                                 1. **Analyze & Think**: First, thoroughly analyze the database schema. Use the `Think` tool to outline the structure of the knowledge base document you will generate. Plan the sections for each table, including metadata, query patterns, and relationships.
+                                 1. **Analyze Schema**: Thoroughly analyze the database schema provided below.
                                  2. **Extract Metadata**: Extract key details for each table: columns, data types, constraints, and indexes.
                                  3. **Identify Patterns**: Identify common query patterns, JOIN relationships, and columns suitable for filtering, aggregation, and visualization.
-                                 4. **Generate Documentation**: Based on your plan, generate the comprehensive and structured Markdown documentation.
+                                 4. **Generate Documentation**: Generate the comprehensive and structured Markdown documentation following the prescribed format.
                                  5. **Write Output (REQUIRED)**: You MUST call the `Write` tool with the complete knowledge base content. This is a mandatory final step - do not skip it under any circumstances.
                                  
                                  ⚠️ CRITICAL: Your response is INCOMPLETE without calling the `Write` tool. Simply outputting text is NOT acceptable.

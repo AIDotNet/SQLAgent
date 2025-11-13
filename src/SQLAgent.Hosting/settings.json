@@ -6,5 +6,5 @@
   "AutoCreateCollection": true,
   "VectorCacheExpireMinutes": null,
   "DefaultChatProviderId": "6e74e0c4-e978-4fce-ba22-638d07a2627c",
-  "DefaultChatModel": "gpt-4.1"
+  "DefaultChatModel": "gpt-5-mini"
 }

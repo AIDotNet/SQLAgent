@@ -1,8 +1,4 @@
-﻿using System.ComponentModel;
-using System.Data;
-using System.Diagnostics;
-using System.Text.Encodings.Web;
-using System.Text.Json;
+﻿using AIDotNet.Toon;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging;
@@ -12,6 +8,11 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using SQLAgent.Infrastructure;
 using SQLAgent.Model;
 using SQLAgent.Prompts;
+using System.ComponentModel;
+using System.Data;
+using System.Diagnostics;
+using System.Text.Encodings.Web;
+using System.Text.Json;
 
 namespace SQLAgent.Facade;
 
@@ -475,15 +476,24 @@ public class SQLAgentClient
         }
 
         /// <summary>
-        /// 模糊搜索表名（只返回表名列表）
+        /// 模糊搜索表名（返回表名和表的详细信息）
         /// </summary>
         [KernelFunction("SearchTables"), Description(
              """
-             Fuzzy search table names using one or more keywords. Returns a JSON array of matching table names.
+             Fuzzy search table names using one or more keywords. Returns a JSON array of matching tables with detailed information.
 
              Parameters:
-             - keywords: An array of keywords to search for in table names or CREATE SQL.
-             - maxResults: Maximum number of table names to return.
+             - keywords: An array of keywords to search for in table names, schema names, comments, or column names.
+             - maxResults: Maximum number of tables to return.
+
+             Returns:
+             A JSON array of table objects, each containing:
+             - name: Full qualified table name (schema.table)
+             - schema: Schema/database name
+             - table: Table name
+             - type: Table type (e.g., "BASE TABLE", "VIEW", "MATERIALIZED VIEW")
+             - comment: Table comment/description (if available)
+             - createSql: CREATE TABLE statement (for SQLite only)
              """)]
         public async Task<string> SearchTables(
             [Description("Array of keywords for fuzzy search")]
@@ -496,45 +506,13 @@ public class SQLAgentClient
 
             try
             {
-                var names = await sqlAgentClient._databaseService.SearchTables(keywords, maxResults);
+                var tableInfoJson = await sqlAgentClient._databaseService.SearchTables(keywords, maxResults);
 
-                return names;
+                return tableInfoJson;
             }
             catch (Exception ex)
             {
-                return JsonSerializer.Serialize(new { error = ex.Message });
-            }
-        }
-
-        /// <summary>
-        /// 根据表名获取该表的结构化 schema（columns, indexes, createSql, sampleRows）
-        /// </summary>
-        [KernelFunction("GetTableSchema"), Description(
-             """
-             Retrieve structured schema information for a specific table.
-
-             Parameters:
-             - tableName: Exact table name to retrieve schema for.
-
-             Returns a JSON object with columns, indexes, createSql and sampleRows.
-             """)]
-        public async Task<string> GetTableSchema(
-            [Description("Exact table name to get schema for")]
-            string[] tableName)
-        {
-            if (tableName.Length == 0)
-            {
-                return JsonSerializer.Serialize(new { error = "Table name is required." });
-            }
-
-            try
-            {
-                var result = await sqlAgentClient._databaseService.GetTableSchema(tableName);
-                return JsonSerializer.Serialize(result, SQLAgentJsonOptions.DefaultOptions);
-            }
-            catch (Exception ex)
-            {
-                return JsonSerializer.Serialize(new { error = ex.Message });
+                return ToonSerializer.Serialize(new { error = ex.Message });
             }
         }
     }

@@ -7,6 +7,7 @@ using Dapper;
 using Npgsql;
 using SQLAgent.Facade;
 using SQLAgent;
+using AIDotNet.Toon;
 
 namespace SQLAgent.Infrastructure.Providers;
 
@@ -28,7 +29,19 @@ public class PostgreSQLDatabaseService(SQLAgentOptions options) : IDatabaseServi
         if (keywords.Length == 0)
         {
             sql = @"
-                SELECT DISTINCT n.nspname || '.' || c.relname AS name
+                SELECT DISTINCT 
+                    n.nspname AS schemaName,
+                    c.relname AS tableName,
+                    n.nspname || '.' || c.relname AS name,
+                    CASE c.relkind 
+                        WHEN 'r' THEN 'BASE TABLE'
+                        WHEN 'v' THEN 'VIEW'
+                        WHEN 'm' THEN 'MATERIALIZED VIEW'
+                        WHEN 'p' THEN 'PARTITIONED TABLE'
+                        WHEN 'f' THEN 'FOREIGN TABLE'
+                        ELSE 'OTHER'
+                    END AS tableType,
+                    COALESCE(obj_description(c.oid, 'pg_class'), '') AS tableComment
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 WHERE n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
@@ -57,7 +70,19 @@ public class PostgreSQLDatabaseService(SQLAgentOptions options) : IDatabaseServi
             }
 
             sql = $@"
-                SELECT DISTINCT n.nspname || '.' || c.relname AS name
+                SELECT DISTINCT 
+                    n.nspname AS schemaName,
+                    c.relname AS tableName,
+                    n.nspname || '.' || c.relname AS name,
+                    CASE c.relkind 
+                        WHEN 'r' THEN 'BASE TABLE'
+                        WHEN 'v' THEN 'VIEW'
+                        WHEN 'm' THEN 'MATERIALIZED VIEW'
+                        WHEN 'p' THEN 'PARTITIONED TABLE'
+                        WHEN 'f' THEN 'FOREIGN TABLE'
+                        ELSE 'OTHER'
+                    END AS tableType,
+                    COALESCE(obj_description(c.oid, 'pg_class'), '') AS tableComment
                 FROM pg_class c
                 JOIN pg_namespace n ON n.oid = c.relnamespace
                 LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
@@ -70,24 +95,48 @@ public class PostgreSQLDatabaseService(SQLAgentOptions options) : IDatabaseServi
         }
 
         var rows = (await connection.QueryAsync(sql, dp)).ToArray();
-        var names = new List<string>();
+        var tableInfos = new List<object>();
+        
         foreach (var r in rows)
         {
-            if (r is IDictionary<string, object> d && d.TryGetValue("name", out var n))
-                names.Add(n?.ToString() ?? string.Empty);
+            if (r is IDictionary<string, object> d)
+            {
+                d.TryGetValue("name", out var name);
+                d.TryGetValue("schemaname", out var schemaName);
+                d.TryGetValue("tablename", out var tableName);
+                d.TryGetValue("tabletype", out var tableType);
+                d.TryGetValue("tablecomment", out var tableComment);
+                
+                tableInfos.Add(new
+                {
+                    name = name?.ToString() ?? string.Empty,
+                    schema = schemaName?.ToString() ?? string.Empty,
+                    table = tableName?.ToString() ?? string.Empty,
+                    type = tableType?.ToString() ?? "BASE TABLE",
+                    comment = tableComment?.ToString() ?? string.Empty
+                });
+            }
             else
             {
                 try
                 {
-                    names.Add(r?.name?.ToString() ?? string.Empty);
+                    tableInfos.Add(new
+                    {
+                        name = r?.name?.ToString() ?? string.Empty,
+                        schema = r?.schemaName?.ToString() ?? string.Empty,
+                        table = r?.tableName?.ToString() ?? string.Empty,
+                        type = r?.tableType?.ToString() ?? "BASE TABLE",
+                        comment = r?.tableComment?.ToString() ?? string.Empty
+                    });
                 }
                 catch
                 {
+                    // 跳过无法解析的行
                 }
             }
         }
 
-        return string.Join(",", names);
+        return ToonSerializer.Serialize(tableInfos);
     }
 
     public async Task<string> GetTableSchema(string[] tableNames)

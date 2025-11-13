@@ -1,12 +1,13 @@
-﻿using System.Data;
-using System.Text;
-using System.Text.Json;
-using System.Collections.Generic;
-using System.Linq;
+﻿using AIDotNet.Toon;
 using Dapper;
 using MySql.Data.MySqlClient;
-using SQLAgent.Facade;
 using SQLAgent;
+using SQLAgent.Facade;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
 
 namespace SQLAgent.Infrastructure.Providers;
 
@@ -27,7 +28,12 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
         if (keywords.Length == 0)
         {
             sql = @"
-                SELECT DISTINCT CONCAT(t.TABLE_SCHEMA, '.', t.TABLE_NAME) AS name
+                SELECT DISTINCT 
+                    t.TABLE_SCHEMA AS schemaName,
+                    t.TABLE_NAME AS tableName,
+                    CONCAT(t.TABLE_SCHEMA, '.', t.TABLE_NAME) AS name,
+                    t.TABLE_TYPE AS tableType,
+                    IFNULL(t.TABLE_COMMENT,'') AS tableComment
                 FROM INFORMATION_SCHEMA.TABLES t
                 WHERE t.TABLE_TYPE IN ('BASE TABLE','VIEW')
                   AND t.TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys')
@@ -53,7 +59,12 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
             }
 
             sql = $@"
-                SELECT DISTINCT CONCAT(t.TABLE_SCHEMA, '.', t.TABLE_NAME) AS name
+                SELECT DISTINCT 
+                    t.TABLE_SCHEMA AS schemaName,
+                    t.TABLE_NAME AS tableName,
+                    CONCAT(t.TABLE_SCHEMA, '.', t.TABLE_NAME) AS name,
+                    t.TABLE_TYPE AS tableType,
+                    IFNULL(t.TABLE_COMMENT,'') AS tableComment
                 FROM INFORMATION_SCHEMA.TABLES t
                 LEFT JOIN INFORMATION_SCHEMA.COLUMNS c 
                     ON c.TABLE_SCHEMA = t.TABLE_SCHEMA AND c.TABLE_NAME = t.TABLE_NAME
@@ -66,24 +77,48 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
         }
 
         var rows = (await connection.QueryAsync(sql, dp)).ToArray();
-        var names = new List<string>();
+        var tableInfos = new List<object>();
+        
         foreach (var r in rows)
         {
-            if (r is IDictionary<string, object> d && d.TryGetValue("name", out var n))
-                names.Add(n?.ToString() ?? string.Empty);
+            if (r is IDictionary<string, object> d)
+            {
+                d.TryGetValue("name", out var name);
+                d.TryGetValue("schemaName", out var schemaName);
+                d.TryGetValue("tableName", out var tableName);
+                d.TryGetValue("tableType", out var tableType);
+                d.TryGetValue("tableComment", out var tableComment);
+                
+                tableInfos.Add(new
+                {
+                    name = name?.ToString() ?? string.Empty,
+                    schema = schemaName?.ToString() ?? string.Empty,
+                    table = tableName?.ToString() ?? string.Empty,
+                    type = tableType?.ToString() ?? "BASE TABLE",
+                    comment = tableComment?.ToString() ?? string.Empty
+                });
+            }
             else
             {
                 try
                 {
-                    names.Add(r?.name?.ToString() ?? string.Empty);
+                    tableInfos.Add(new
+                    {
+                        name = r?.name?.ToString() ?? string.Empty,
+                        schema = r?.schemaName?.ToString() ?? string.Empty,
+                        table = r?.tableName?.ToString() ?? string.Empty,
+                        type = r?.tableType?.ToString() ?? "BASE TABLE",
+                        comment = r?.tableComment?.ToString() ?? string.Empty
+                    });
                 }
                 catch
                 {
+                    // 跳过无法解析的行
                 }
             }
         }
 
-        return string.Join(",", names);
+        return ToonSerializer.Serialize(tableInfos);
     }
 
     public async Task<string> GetTableSchema(string[] tableNames)

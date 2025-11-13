@@ -44,11 +44,11 @@ public interface IDatabaseService
     }
 
     /// <summary>
-    /// 搜索表
+    /// 搜索表（返回表名和表的详细信息，包括CREATE SQL）
     /// </summary>
     /// <param name="keywords"></param>
     /// <param name="maxResults"></param>
-    /// <returns></returns>
+    /// <returns>返回JSON格式的表信息数组，包含表名和CREATE SQL</returns>
     Task<string> SearchTables(string[] keywords, int maxResults = 20);
 
     /// <summary>

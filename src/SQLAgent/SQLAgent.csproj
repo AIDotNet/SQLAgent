@@ -7,6 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+      <PackageReference Include="AIDotNet.Toon" Version="0.1.3" />
       <PackageReference Include="Dapper" Version="2.1.66" />
       <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.0-preview2.25289.6" />
       <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />

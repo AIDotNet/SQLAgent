@@ -1,9 +1,10 @@
-﻿using System.Data;
-using System.Text;
-using System.Text.Json;
+﻿using AIDotNet.Toon;
 using Dapper;
 using Microsoft.Data.Sqlite;
 using SQLAgent.Facade;
+using System.Data;
+using System.Text;
+using System.Text.Json;
 
 namespace SQLAgent.Infrastructure.Providers;
 
@@ -24,7 +25,7 @@ public class SQLiteDatabaseService(SQLAgentOptions options) : IDatabaseService
         if (keywords.Length == 0)
         {
             sql = @"
-                        SELECT name
+                        SELECT name, sql, type
                         FROM sqlite_master
                         WHERE type='table' AND name NOT LIKE 'sqlite_%'
                         LIMIT @maxResults;";
@@ -42,7 +43,7 @@ public class SQLiteDatabaseService(SQLAgentOptions options) : IDatabaseService
             }
 
             sql = $@"
-                        SELECT name
+                        SELECT name, sql, type
                         FROM sqlite_master
                         WHERE type='table' AND name NOT LIKE 'sqlite_%'
                           AND ({string.Join(" OR ", conds)})
@@ -51,24 +52,42 @@ public class SQLiteDatabaseService(SQLAgentOptions options) : IDatabaseService
         }
 
         var rows = (await connection.QueryAsync(sql, dp)).ToArray();
-        var names = new List<string>();
+        var tableInfos = new List<object>();
+        
         foreach (var r in rows)
         {
-            if (r is IDictionary<string, object> d && d.TryGetValue("name", out var n))
-                names.Add(n?.ToString() ?? string.Empty);
+            if (r is IDictionary<string, object> d)
+            {
+                d.TryGetValue("name", out var tableName);
+                d.TryGetValue("sql", out var createSql);
+                d.TryGetValue("type", out var tableType);
+                
+                tableInfos.Add(new
+                {
+                    name = tableName?.ToString() ?? string.Empty,
+                    createSql = createSql?.ToString() ?? string.Empty,
+                    type = tableType?.ToString() ?? "table"
+                });
+            }
             else
             {
                 try
                 {
-                    names.Add(r?.name?.ToString() ?? string.Empty);
+                    tableInfos.Add(new
+                    {
+                        name = r?.name?.ToString() ?? string.Empty,
+                        createSql = r?.sql?.ToString() ?? string.Empty,
+                        type = r?.type?.ToString() ?? "table"
+                    });
                 }
                 catch
                 {
+                    // 跳过无法解析的行
                 }
             }
         }
 
-        return string.Join(",", names);
+        return ToonSerializer.Serialize(tableInfos);
     }
 
     public async Task<string> GetTableSchema(string[] tableNames)

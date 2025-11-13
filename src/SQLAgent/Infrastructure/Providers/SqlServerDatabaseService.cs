@@ -1,12 +1,13 @@
-﻿using System.Data;
-using System.Text;
-using System.Text.Json;
-using System.Collections.Generic;
-using System.Linq;
+﻿using AIDotNet.Toon;
 using Dapper;
 using Microsoft.Data.SqlClient;
-using SQLAgent.Facade;
 using SQLAgent;
+using SQLAgent.Facade;
+using System.Collections.Generic;
+using System.Data;
+using System.Linq;
+using System.Text;
+using System.Text.Json;
 
 namespace SQLAgent.Infrastructure.Providers;
 
@@ -28,9 +29,15 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
         {
             sql = @"
                 SELECT DISTINCT TOP (@maxResults)
-                       s.name + '.' + o.name AS name
+                       s.name AS schemaName,
+                       o.name AS tableName,
+                       s.name + '.' + o.name AS name,
+                       CASE o.type WHEN 'U' THEN 'BASE TABLE' WHEN 'V' THEN 'VIEW' ELSE 'OTHER' END AS tableType,
+                       ISNULL(CAST(ep.value AS NVARCHAR(MAX)), '') AS tableComment
                 FROM sys.objects AS o
                 JOIN sys.schemas AS s ON s.schema_id = o.schema_id
+                LEFT JOIN sys.extended_properties ep
+                    ON ep.class = 1 AND ep.major_id = o.object_id AND ep.minor_id = 0 AND ep.name = 'MS_Description'
                 WHERE o.type IN ('U','V')
                   AND s.name NOT IN ('sys','INFORMATION_SCHEMA')
                 ORDER BY s.name, o.name;";
@@ -55,7 +62,11 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
 
             sql = $@"
                 SELECT DISTINCT TOP (@maxResults)
-                       s.name + '.' + o.name AS name
+                       s.name AS schemaName,
+                       o.name AS tableName,
+                       s.name + '.' + o.name AS name,
+                       CASE o.type WHEN 'U' THEN 'BASE TABLE' WHEN 'V' THEN 'VIEW' ELSE 'OTHER' END AS tableType,
+                       ISNULL(CAST(ep.value AS NVARCHAR(MAX)), '') AS tableComment
                 FROM sys.objects AS o
                 JOIN sys.schemas AS s ON s.schema_id = o.schema_id
                 LEFT JOIN sys.extended_properties ep
@@ -72,24 +83,48 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
         }
 
         var rows = (await connection.QueryAsync(sql, dp)).ToArray();
-        var names = new List<string>();
+        var tableInfos = new List<object>();
+        
         foreach (var r in rows)
         {
-            if (r is IDictionary<string, object> d && d.TryGetValue("name", out var n))
-                names.Add(n?.ToString() ?? string.Empty);
+            if (r is IDictionary<string, object> d)
+            {
+                d.TryGetValue("name", out var name);
+                d.TryGetValue("schemaName", out var schemaName);
+                d.TryGetValue("tableName", out var tableName);
+                d.TryGetValue("tableType", out var tableType);
+                d.TryGetValue("tableComment", out var tableComment);
+                
+                tableInfos.Add(new
+                {
+                    name = name?.ToString() ?? string.Empty,
+                    schema = schemaName?.ToString() ?? string.Empty,
+                    table = tableName?.ToString() ?? string.Empty,
+                    type = tableType?.ToString() ?? "BASE TABLE",
+                    comment = tableComment?.ToString() ?? string.Empty
+                });
+            }
             else
             {
                 try
                 {
-                    names.Add(r?.name?.ToString() ?? string.Empty);
+                    tableInfos.Add(new
+                    {
+                        name = r?.name?.ToString() ?? string.Empty,
+                        schema = r?.schemaName?.ToString() ?? string.Empty,
+                        table = r?.tableName?.ToString() ?? string.Empty,
+                        type = r?.tableType?.ToString() ?? "BASE TABLE",
+                        comment = r?.tableComment?.ToString() ?? string.Empty
+                    });
                 }
                 catch
                 {
+                    // 跳过无法解析的行
                 }
             }
         }
 
-        return string.Join(",", names);
+        return ToonSerializer.Serialize(tableInfos);
     }
 
     public async Task<string> GetTableSchema(string[] tableNames)

@@ -12,3 +12,4 @@ src/SQLBox.Hosting/providers.json
 /.idea
 
 *.txt
+connections.json

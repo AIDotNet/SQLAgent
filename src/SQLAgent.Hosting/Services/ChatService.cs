@@ -87,18 +87,25 @@ public class ChatService(
                 return;
             }
 
-            // 准备索引所需的嵌入与向量存储（强制使用 Sqlite-Vec）
-            var embeddingProviderId = settings.EmbeddingProviderId ?? input.ProviderId;
-            var embeddingProvider = string.IsNullOrWhiteSpace(embeddingProviderId)
-                ? provider
-                : await providerManager.GetAsync(embeddingProviderId);
-
-            if (embeddingProvider == null)
+            if (string.IsNullOrEmpty(connection.Agent))
             {
-                await SendErrorAsync(context, "EMBED_PROVIDER_NOT_FOUND",
-                    $"Embedding provider '{embeddingProviderId}' not found");
+                await SendErrorAsync(context, "AGENT_NOT_CONFIGURED",
+                    $"No agent configured for connection '{connection.Name}'");
                 return;
             }
+
+            // 准备索引所需的嵌入与向量存储（强制使用 Sqlite-Vec）
+            // var embeddingProviderId = settings.EmbeddingProviderId ?? input.ProviderId;
+            // var embeddingProvider = string.IsNullOrWhiteSpace(embeddingProviderId)
+            //     ? provider
+            //     : await providerManager.GetAsync(embeddingProviderId);
+            //
+            // if (embeddingProvider == null)
+            // {
+            //     await SendErrorAsync(context, "EMBED_PROVIDER_NOT_FOUND",
+            //         $"Embedding provider '{embeddingProviderId}' not found");
+            //     return;
+            // }
 
             // 使用 OpenAI 官方 SDK 的流式Function Calling与用户交互
             // AI会根据对话内容决定何时调用generate_sql函数

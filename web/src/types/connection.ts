@@ -34,3 +34,20 @@ export interface TestConnectionResponse {
   message: string;
   elapsedMs: number;
 }
+
+export const AgentGenerationStatus = {
+  NotStarted: 0,
+  InProgress: 1,
+  Completed: 2,
+  Failed: 3,
+} as const;
+
+export type AgentGenerationStatus = typeof AgentGenerationStatus[keyof typeof AgentGenerationStatus];
+
+export interface AgentGenerationState {
+  status: AgentGenerationStatus;
+  message?: string;
+  startTime?: string;
+  endTime?: string;
+  errorMessage?: string;
+}

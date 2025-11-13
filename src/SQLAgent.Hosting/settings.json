@@ -1,0 +1,10 @@
+{
+  "EmbeddingProviderId": "974f8401-adf8-424c-971c-814fa732ca2d",
+  "EmbeddingModel": "text-embedding-ada-002",
+  "VectorDbPath": "Data Source=vectors.db",
+  "VectorCollection": "table_vectors",
+  "AutoCreateCollection": true,
+  "VectorCacheExpireMinutes": null,
+  "DefaultChatProviderId": "6e74e0c4-e978-4fce-ba22-638d07a2627c",
+  "DefaultChatModel": "gpt-4.1"
+}

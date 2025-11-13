@@ -36,7 +36,8 @@ public class ChatService(
     /// SSE流式对话接口
     /// </summary>
     [HttpPost("completion")]
-    public async Task CompletionAsync(HttpContext context, CompletionInput input)
+    public async Task CompletionAsync(HttpContext context,
+        CompletionInput input)
     {
         var sw = Stopwatch.StartNew();
 
@@ -289,9 +290,9 @@ public class ChatService(
 
                             var sqlBotBuilder = new SQLAgentBuilder(serviceCollection);
                             sqlBotBuilder
-                                .WithDatabaseType(connection.SqlType, connection.ConnectionString)
+                                .WithDatabaseType(connection.SqlType, connection.ConnectionString, connection.Id)
                                 .WithLLMProvider(input.Model, provider.ApiKey, provider.Endpoint ?? "", provider.Type)
-                                .Build();
+                                .Build(connectionManager);
 
                             var serviceProvider = serviceCollection.BuildServiceProvider();
                             var agentClient = serviceProvider.GetRequiredService<SQLAgentClient>();
@@ -340,10 +341,13 @@ public class ChatService(
                                                 {
                                                     if (row is IDictionary<string, object> rowDict)
                                                     {
-                                                        return columns.Select(col => 
-                                                            rowDict.TryGetValue(col, out var value) ? value : (object)null!)
+                                                        return columns.Select(col =>
+                                                                rowDict.TryGetValue(col, out var value)
+                                                                    ? value
+                                                                    : (object)null!)
                                                             .ToArray();
                                                     }
+
                                                     return Array.Empty<object>();
                                                 })
                                                 .ToArray();

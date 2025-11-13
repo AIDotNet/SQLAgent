@@ -169,19 +169,22 @@ public static class EndpointRouteBuilderExtensions
     }
 
     /// <summary>
-    /// 映射向量索引 API
+    /// 映射连接 Agent API
     /// </summary>
-    public static IEndpointRouteBuilder MapVectorIndexApis(this IEndpointRouteBuilder app)
+    public static IEndpointRouteBuilder MapConnectionAgentApis(this IEndpointRouteBuilder app)
     {
-        app.MapPost("/api/connections/{id}/index/init", 
-            async (string id, VectorIndexService service) =>
-                await service.InitializeIndexAsync(id))
-            .WithName("InitializeVectorIndex");
+        app.MapPost("/api/connections/{id}/agent/generate", 
+            async (string id, ConnectionAgentService service) =>
+                await service.GenerateAgentAsync(id))
+            .WithName("GenerateConnectionAgent");
 
-        app.MapPost("/api/connections/{id}/index/update", 
-            async (string id, VectorIndexService service) =>
-                await service.UpdateIndexAsync(id))
-            .WithName("UpdateVectorIndex");
+        app.MapGet("/api/connections/{id}/agent/status",
+            (string id, ConnectionAgentService service) =>
+            {
+                var status = service.GetGenerationStatus(id);
+                return Results.Ok(status);
+            })
+            .WithName("GetConnectionAgentStatus");
 
         return app;
     }
@@ -195,7 +198,7 @@ public static class EndpointRouteBuilderExtensions
         app.MapProviderApis();
         app.MapChatApis();
         app.MapSettingsApis();
-        app.MapVectorIndexApis();
+        app.MapConnectionAgentApis();
 
         return app;
     }

@@ -1,18 +1,18 @@
-﻿using AIDotNet.Toon;
-using Dapper;
-using Microsoft.Data.Sqlite;
+﻿using System.ClientModel;
+using System.Diagnostics;
+using System.Text.Json;
+using Microsoft.Agents.AI;
+using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Logging;
 using Microsoft.SemanticKernel;
 using Microsoft.SemanticKernel.ChatCompletion;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
+using OpenAI;
+using OpenAI.Chat;
 using SQLAgent.Infrastructure;
 using SQLAgent.Model;
 using SQLAgent.Prompts;
-using System.ComponentModel;
-using System.Data;
-using System.Diagnostics;
-using System.Text.Encodings.Web;
-using System.Text.Json;
+using ChatMessage = Microsoft.Extensions.AI.ChatMessage;
+using TextContent = Microsoft.Extensions.AI.TextContent;
 
 namespace SQLAgent.Facade;
 
@@ -21,8 +21,9 @@ public class SQLAgentClient
     private static readonly ActivitySource ActivitySource = new("SQLAgent");
 
     private readonly SQLAgentOptions _options;
-    private readonly IDatabaseService _databaseService;
+    internal readonly IDatabaseService DatabaseService;
     private readonly ILogger<SQLAgentClient> _logger;
+    private readonly IDatabaseConnectionManager _databaseConnectionManager;
     private readonly SqlTool _sqlResult;
 
     /// <summary>
@@ -31,15 +32,130 @@ public class SQLAgentClient
     /// <returns></returns>
     private readonly bool _useVectorDatabaseIndex = false;
 
-    internal SQLAgentClient(SQLAgentOptions options, IDatabaseService databaseService, ILogger<SQLAgentClient> logger)
+    private readonly ChatClient _chatClient;
+
+    internal SQLAgentClient(SQLAgentOptions options, IDatabaseService databaseService, ILogger<SQLAgentClient> logger,
+        IDatabaseConnectionManager databaseConnectionManager)
     {
         _options = options;
-        _databaseService = databaseService;
+        DatabaseService = databaseService;
         _logger = logger;
+        _databaseConnectionManager = databaseConnectionManager;
 
         _useVectorDatabaseIndex = options.UseVectorDatabaseIndex;
 
         _sqlResult = new SqlTool(this);
+
+        var apiKey = new ApiKeyCredential(_options.APIKey); // 某些端点可能不需要
+        var openAiClient = new OpenAIClient(apiKey, new OpenAIClientOptions
+        {
+            Endpoint = new Uri(_options.Endpoint) // 您的自定义端点
+        });
+
+        _chatClient = openAiClient.GetChatClient(_options.Model);
+    }
+
+    /// <summary>
+    /// 生成Agent数据库信息
+    /// </summary>
+    public async Task GenerateAgentDatabaseInfoAsync()
+    {
+        var options = new ChatClientAgentOptions()
+        {
+            Instructions = PromptConstants.GlobalDatabaseSchemaAnalysisSystemPrompt,
+            ChatOptions = new ChatOptions()
+            {
+                ToolMode = ChatToolMode.Auto,
+                MaxOutputTokens = _options.MaxOutputTokens,
+                Temperature = 0.7f,
+                Tools = (List<AITool>)[]
+            }
+        };
+
+        var generateAgentTool = new GenerateAgentTool();
+
+        options.ChatOptions.Tools.Add(AIFunctionFactory.Create(generateAgentTool.WriteAgent,
+            new AIFunctionFactoryOptions()
+            {
+                Name = "Write"
+            }));
+        options.ChatOptions.Tools.Add(AIFunctionFactory.Create(ThinkTool.Think, new AIFunctionFactoryOptions()
+        {
+            Name = "Think"
+        }));
+
+        var agent = _chatClient.CreateAIAgent(options);
+
+        var messages = new List<ChatMessage>
+        {
+            new(ChatRole.User, new List<AIContent>()
+            {
+                new TextContent("""
+                                Please analyze the complete database schema and generate a comprehensive knowledge base document optimized for AI SQL query generation.
+
+                                Your mission is to create structured documentation that will help an AI agent:
+                                1. Quickly locate relevant tables for user queries
+                                2. Understand column purposes and data types
+                                3. Generate correct JOIN statements with proper relationships
+                                4. Select appropriate columns for data visualization
+                                5. Apply database-specific SQL syntax correctly
+
+                                Focus on actionable, structured information over narrative descriptions.
+                                
+                                IMPORTANT: You MUST complete the task by calling the `Write` tool - DO NOT just output text directly.
+                                """),
+                new TextContent($"""
+                                 <system-reminder>
+                                 # Database Environment
+                                 - **Database Type**: {_options.SqlType.ToString()}
+                                 - **Task**: Generate AI-consumable database knowledge base
+
+                                 # Workflow Instructions (MANDATORY - Follow All Steps)
+                                 1. **Analyze & Think**: First, thoroughly analyze the database schema. Use the `Think` tool to outline the structure of the knowledge base document you will generate. Plan the sections for each table, including metadata, query patterns, and relationships.
+                                 2. **Extract Metadata**: Extract key details for each table: columns, data types, constraints, and indexes.
+                                 3. **Identify Patterns**: Identify common query patterns, JOIN relationships, and columns suitable for filtering, aggregation, and visualization.
+                                 4. **Generate Documentation**: Based on your plan, generate the comprehensive and structured Markdown documentation.
+                                 5. **Write Output (REQUIRED)**: You MUST call the `Write` tool with the complete knowledge base content. This is a mandatory final step - do not skip it under any circumstances.
+                                 
+                                 ⚠️ CRITICAL: Your response is INCOMPLETE without calling the `Write` tool. Simply outputting text is NOT acceptable.
+
+                                 # Critical Requirements
+                                 - Include concrete SQL examples for common query scenarios
+                                 - Highlight columns suitable for filtering, grouping, and aggregation
+                                 - Document JOIN patterns between related tables
+                                 - Mark visualization-friendly columns (avoid IDs, prefer descriptive fields)
+                                 - Use database-specific syntax appropriate for {_options.SqlType.ToString()}
+
+                                 The generated document will be embedded in AI prompts, so optimize for:
+                                 - Fast retrieval through clear hierarchy
+                                 - Structured formats (tables, lists) over paragraphs
+                                 - SQL-ready column names and examples
+                                 </system-reminder>
+                                 """),
+                new TextContent($"""
+                                 <database-schema-data>
+                                 # Complete Database Schema Information
+
+                                 The following contains all table structures, columns, constraints, and relationships in the database.
+                                 Analyze this information to generate the comprehensive knowledge base document.
+
+                                 {await DatabaseService.GetAllTableNamesAsync()}
+                                 </database-schema-data>
+                                 """)
+            })
+        };
+
+        var thread = agent.GetNewThread();
+
+        await foreach (var item in agent.RunStreamingAsync(messages, thread))
+        {
+            _logger.LogInformation(item.Text);
+        }
+
+        _logger.LogInformation("Agent database information generation completed.");
+
+        // 更新当前链接的agent
+        await _databaseConnectionManager.UpdateAgentAsync(_options.ConnectionId, generateAgentTool.AgentContent);
     }
 
     /// <summary>
@@ -54,62 +170,92 @@ public class SQLAgentClient
 
         _logger.LogInformation("Starting SQL Agent execution for query: {Query}", input.Query);
 
-        var kernel = KernelFactory.CreateKernel(_options.Model, _options.APIKey, _options.Endpoint,
-            (builder => { builder.Plugins.AddFromObject(_sqlResult, "sql"); }));
-        var chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
+        var agent = await _databaseConnectionManager.GetConnectionAsync(_options.ConnectionId);
 
-        var history = new ChatHistory();
-        history.AddSystemMessage(_options.SqlBotSystemPrompt);
+        var messages = new List<ChatMessage>
+        {
+            new ChatMessage(ChatRole.User, new List<AIContent>()
+            {
+                new TextContent($"""
+                                 # User Query
+                                 {input.Query}
+                                 """),
+                new TextContent($"""
+                                 <database-info>
+                                 The following is comprehensive, pre-analyzed database schema information for your reference.
+                                 This information has been validated and contains table structures, relationships, and usage patterns.
+                                 ALWAYS prioritize information from this section before considering tool calls.
 
-        history.AddUserMessage([
-            new TextContent(input.Query),
-            new TextContent(PromptConstants.SQLGeneratorSystemRemindPrompt),
-            new TextContent($"""
-                             <user-env>
-                             {(_options.AllowWrite ? "The user has granted you the permission to directly manipulate the database, including creating, updating and deleting records." : "Database write operations are NOT allowed.")}
-                             The database type is {_options.SqlType}.
-                             CRITICAL: When calling sql-Write with executeType=Query or executeType=EChart, 
-                             you MUST provide the 'columns' parameter with all SELECT columns.
-                             <user-env>
-                             """)
-        ]);
+                                 {agent.Agent}
+                                 </database-info>
+                                 """),
+                new TextContent($"""
+                                 <user-env>
+                                 - Database Type: {_options.SqlType}
+                                 - Write Permissions: {(_options.AllowWrite ? "ENABLED - You can perform INSERT, UPDATE, DELETE, CREATE, DROP operations (with confirmation)" : "DISABLED - Only SELECT queries are allowed")}
+                                 - Vector Search: {(_useVectorDatabaseIndex ? "ENABLED" : "DISABLED")}
+
+                                 CRITICAL REQUIREMENTS:
+                                 1. When calling sql-Write with executeType=Query or executeType=EChart, you MUST provide the 'columns' parameter listing all SELECT columns
+                                 2. Always use parameterized queries with '@' prefixed parameter names
+                                 3. For EChart queries, follow DATA SELECTION RULES to exclude unnecessary ID fields
+                                 </user-env>
+                                 """),
+                new TextContent(PromptConstants.SQLGeneratorSystemRemindPrompt)
+            })
+        };
 
         _logger.LogInformation("Calling AI model to generate SQL for query: {Query}", input.Query);
 
-        await chatCompletion.GetChatMessageContentsAsync(history,
-            new OpenAIPromptExecutionSettings()
+        var agents = _chatClient.CreateAIAgent(new ChatClientAgentOptions()
+        {
+            Instructions = _options.SqlBotSystemPrompt,
+            ChatOptions = new ChatOptions()
             {
-                MaxTokens = _options.MaxOutputTokens,
-                Temperature = 0.2f,
-                ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
-            }, kernel);
+                Tools = new List<AITool>()
+                {
+                    AIFunctionFactory.Create(_sqlResult.SearchTables, new AIFunctionFactoryOptions()
+                    {
+                        Name = "SearchTables"
+                    }),
+                    AIFunctionFactory.Create(_sqlResult.Write, new AIFunctionFactoryOptions()
+                    {
+                        Name = "Write"
+                    })
+                },
+                ToolMode = new AutoChatToolMode(),
+                MaxOutputTokens = _options.MaxOutputTokens,
+                Temperature = 0.2f
+            },
+        });
+
+        var thread = agents.GetNewThread();
+
+        await agents.RunAsync(messages, thread);
 
         _logger.LogInformation("AI model call completed, processing {Count} SQL results",
             _sqlResult.SqlBoxResult.Count);
 
-        foreach (var _sqlTool in _sqlResult.SqlBoxResult)
+        foreach (var sqlTool in _sqlResult.SqlBoxResult)
         {
-            _logger.LogInformation("Processing SQL result: executeType={executeType}, SQL={Sql}", _sqlTool.ExecuteType,
-                _sqlTool.Sql);
+            _logger.LogInformation("Processing SQL result: executeType={executeType}, SQL={Sql}", sqlTool.ExecuteType,
+                sqlTool.Sql);
 
-            switch (_sqlTool.ExecuteType)
+            switch (sqlTool.ExecuteType)
             {
                 // 判断SQL是否是查询
                 case SqlBoxExecuteType.EChart:
-                {
-                    var echartsTool = new EchartsTool();
-                    var value = await ExecuteSqliteQueryAsync(_sqlTool);
+                    {
+                        var echartsTool = new EchartsTool();
+                        var value = await ExecuteSqliteQueryAsync(sqlTool);
 
-                    kernel = KernelFactory.CreateKernel(_options.Model, _options.APIKey, _options.Endpoint,
-                        (builder => { builder.Plugins.AddFromObject(echartsTool, "echarts"); }), _options.AIProvider);
-                    chatCompletion = kernel.GetRequiredService<IChatCompletionService>();
+                        var echartMessages = new List<ChatMessage>();
+                        var echartsHistory = new ChatHistory();
+                        echartsHistory.AddSystemMessage(PromptConstants.SQLGeneratorEchartsDataPrompt);
 
-                    var echartsHistory = new ChatHistory();
-                    echartsHistory.AddSystemMessage(PromptConstants.SQLGeneratorEchartsDataPrompt);
+                        bool? any = sqlTool.Parameters.Count != 0;
 
-                    bool? any = _sqlTool.Parameters.Count != 0;
-
-                    var userMessageText = $$"""
+                        var userMessageText = $$"""
                                             Generate an ECharts option configuration for the following SQL query results.
 
                                             # User's Original Query
@@ -117,13 +263,13 @@ public class SQLAgentClient
 
                                             # SQL Query Context
                                             ```sql
-                                            {{_sqlTool.Sql}}
+                                            {{sqlTool.Sql}}
                                             ```
 
                                             # Query Parameters
                                             {{(any == true
-                                                ? string.Join("\n", _sqlTool.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
-                                                : "No parameters")}}
+                                                    ? string.Join("\n", sqlTool.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
+                                                    : "No parameters")}}
 
                                             # Data Structure Analysis
                                             The query returns the following result set that needs visualization.
@@ -181,7 +327,9 @@ public class SQLAgentClient
                                             ```
                                             Return ONLY the JSON option object, no additional text.
                                             """;
-                    echartsHistory.AddUserMessage([
+
+                        echartMessages.Add(new ChatMessage(ChatRole.User, new List<AIContent>()
+                    {
                         new TextContent(userMessageText),
                         new TextContent(
                             """
@@ -192,45 +340,40 @@ public class SQLAgentClient
                             - It is necessary to use `echarts-Write` to store the generated ECharts options.
                             </system-remind>
                             """)
-                    ]);
+                    }));
 
-                    _logger.LogInformation("Generating ECharts option for SQL query");
+                        _logger.LogInformation("Generating ECharts option for SQL query");
 
-                    var result = await chatCompletion.GetChatMessageContentAsync(echartsHistory,
-                        new OpenAIPromptExecutionSettings()
+                        var echartsThread = agents.GetNewThread();
+                        var result = await agents.RunAsync(messages, echartsThread);
+
+                        // 获取生成的 ECharts option 并注入实际数据
+                        if (!string.IsNullOrWhiteSpace(echartsTool.EchartsOption) && value is { Length: > 0 })
                         {
-                            MaxTokens = _options.MaxOutputTokens,
-                            Temperature = 0.2f,
-                            ToolCallBehavior = ToolCallBehavior.AutoInvokeKernelFunctions,
-                        }, kernel);
+                            var processedOption = InjectDataIntoEchartsOption(echartsTool.EchartsOption, value);
+                            echartsTool.EchartsOption = processedOption;
 
-                    // 获取生成的 ECharts option 并注入实际数据
-                    if (!string.IsNullOrWhiteSpace(echartsTool.EchartsOption) && value is { Length: > 0 })
-                    {
-                        var processedOption = InjectDataIntoEchartsOption(echartsTool.EchartsOption, value);
-                        echartsTool.EchartsOption = processedOption;
+                            // 将 ECharts option 保存到结果对象中
+                            sqlTool.EchartsOption = processedOption;
 
-                        // 将 ECharts option 保存到结果对象中
-                        _sqlTool.EchartsOption = processedOption;
+                            _logger.LogInformation("ECharts option generated and data injected successfully");
+                        }
+                        else
+                        {
+                            _logger.LogWarning("No ECharts option generated or no query results to inject");
+                        }
 
-                        _logger.LogInformation("ECharts option generated and data injected successfully");
+                        break;
                     }
-                    else
-                    {
-                        _logger.LogWarning("No ECharts option generated or no query results to inject");
-                    }
-
-                    break;
-                }
                 case SqlBoxExecuteType.Query:
-                {
-                    var value = await ExecuteSqliteQueryAsync(_sqlTool);
+                    {
+                        var value = await ExecuteSqliteQueryAsync(sqlTool);
 
-                    _sqlTool.Result = value;
-                    break;
-                }
+                        sqlTool.Result = value;
+                        break;
+                    }
                 default:
-                    await ExecuteSqliteNonQueryAsync(_sqlTool);
+                    await ExecuteSqliteNonQueryAsync(sqlTool);
                     break;
             }
         }
@@ -254,7 +397,7 @@ public class SQLAgentClient
         try
         {
             // 使用 Dapper 执行参数化查询
-            var queryResult = await _databaseService.ExecuteSqliteQueryAsync(result.Sql, result.Parameters);
+            var queryResult = await DatabaseService.ExecuteSqliteQueryAsync(result.Sql, result.Parameters);
             _logger.LogInformation("Query executed successfully, returned {Count} rows", queryResult?.Count() ?? 0);
 
             return queryResult?.ToArray();
@@ -296,7 +439,7 @@ public class SQLAgentClient
         try
         {
             // 使用 Dapper 执行参数化非查询操作
-            var affectedRows = await _databaseService.ExecuteSqliteNonQueryAsync(result.Sql, result.Parameters);
+            var affectedRows = await DatabaseService.ExecuteSqliteNonQueryAsync(result.Sql, result.Parameters);
 
             _logger.LogInformation("Non-query operation executed successfully, affected {AffectedRows} rows",
                 affectedRows);
@@ -390,130 +533,6 @@ public class SQLAgentClient
         {
             _logger.LogWarning(ex, "Data injection failed: {Message}", ex.Message);
             return optionTemplate;
-        }
-    }
-
-    public class EchartsTool
-    {
-        public string EchartsOption = string.Empty;
-
-        [KernelFunction("Write"), Description(
-             """
-             Writes the generated Echarts option.
-
-             Usage:
-             - This tool should be called when you have generated the final Echarts option.
-             - The option will be directly written and used.
-             - Ensure the Echarts option is correct and complete before calling this tool.
-             """)]
-        public string Write(string option)
-        {
-            EchartsOption = option;
-            return """
-                   <system-remind>
-                   The Echarts option has been written and completed.
-                   </system-remind>
-                   """;
-        }
-    }
-
-    public class SqlTool(SQLAgentClient sqlAgentClient)
-    {
-        public readonly List<SQLAgentResult> SqlBoxResult = new();
-
-        [KernelFunction("Write"), Description(
-             """
-             Writes the generated SQL statement.
-
-             Usage:
-             - This tool should be called when you have generated the final SQL statement.
-             - The SQL will be directly written and executed.
-             - Ensure the SQL statement is correct and complete before calling this tool.
-             """)]
-        public string Write(
-            [Description("""
-                         Generated SQL statement: If parameterized query is used, it will be an SQL statement with parameters. 
-                         <example>
-                         SELECT * FROM Users WHERE Age > @AgeParam
-                         </example>
-                         """)]
-            string sql,
-            [Description("If it is not possible to generate a SQL-friendly version, inform the user accordingly.")]
-            string? errorMessage,
-            [Description("Indicate the type of SQL currently being executed.")]
-            SqlBoxExecuteType executeType,
-            [Description("Columns involved in the SQL statement, if any")]
-            Dictionary<string, string>? columns = null,
-            [Description("Parameters for the SQL statement, if any")]
-            SqlBoxParameter[]? parameters = null)
-        {
-            // 验证：Query 和 EChart 类型必须提供 columns
-            if (executeType is SqlBoxExecuteType.Query or SqlBoxExecuteType.EChart
-                && (columns == null || columns.Count == 0))
-            {
-                return """
-                       <system-error>
-                       ERROR: When executeType is Query or EChart, the 'columns' parameter is REQUIRED.
-                       Please specify all columns that appear in the SELECT clause.
-                       </system-error>
-                       """;
-            }
-
-            var items = new SQLAgentResult
-            {
-                Sql = sql,
-                Columns = columns,
-                ExecuteType = executeType,
-                ErrorMessage = errorMessage,
-                Parameters = parameters?.ToList() ?? new List<SqlBoxParameter>()
-            };
-            SqlBoxResult.Add(items);
-            return """
-                   <system-remind>
-                   The SQL has been written and completed.
-                   </system-remind>
-                   """;
-        }
-
-        /// <summary>
-        /// 模糊搜索表名（返回表名和表的详细信息）
-        /// </summary>
-        [KernelFunction("SearchTables"), Description(
-             """
-             Fuzzy search table names using one or more keywords. Returns a JSON array of matching tables with detailed information.
-
-             Parameters:
-             - keywords: An array of keywords to search for in table names, schema names, comments, or column names.
-             - maxResults: Maximum number of tables to return.
-
-             Returns:
-             A JSON array of table objects, each containing:
-             - name: Full qualified table name (schema.table)
-             - schema: Schema/database name
-             - table: Table name
-             - type: Table type (e.g., "BASE TABLE", "VIEW", "MATERIALIZED VIEW")
-             - comment: Table comment/description (if available)
-             - createSql: CREATE TABLE statement (for SQLite only)
-             """)]
-        public async Task<string> SearchTables(
-            [Description("Array of keywords for fuzzy search")]
-            string[] keywords,
-            [Description("Maximum number of results to return")]
-            int maxResults = 20)
-        {
-            maxResults = Math.Clamp(maxResults, 1, 100);
-            if (keywords == null) keywords = [];
-
-            try
-            {
-                var tableInfoJson = await sqlAgentClient._databaseService.SearchTables(keywords, maxResults);
-
-                return tableInfoJson;
-            }
-            catch (Exception ex)
-            {
-                return ToonSerializer.Serialize(new { error = ex.Message });
-            }
         }
     }
 }

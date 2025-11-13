@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
 using SQLAgent.Entities;
 
 namespace SQLAgent.Infrastructure;
@@ -63,4 +60,6 @@ public interface IDatabaseConnectionManager
     /// <param name="cancellationToken">取消令牌 / Cancellation token</param>
     /// <returns>连接是否成功 / Whether the connection was successful</returns>
     Task<bool> TestConnectionAsync(string connectionId, CancellationToken cancellationToken = default);
+    
+    Task UpdateAgentAsync(string connectionId, string agent, CancellationToken cancellationToken = default);
 }

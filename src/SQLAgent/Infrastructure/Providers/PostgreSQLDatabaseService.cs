@@ -278,4 +278,184 @@ public class PostgreSQLDatabaseService(SQLAgentOptions options) : IDatabaseServi
              </system-remind>
              """;
     }
+
+    public async Task<string> GetAllTableNamesAsync()
+    {
+        
+        using var connection = GetConnection();
+
+        var sql = @"
+                SELECT DISTINCT 
+                    n.nspname AS schemaName,
+                    c.relname AS tableName,
+                    n.nspname || '.' || c.relname AS name,
+                    c.oid AS tableOid,
+                    CASE c.relkind 
+                        WHEN 'r' THEN 'BASE TABLE'
+                        WHEN 'v' THEN 'VIEW'
+                        WHEN 'm' THEN 'MATERIALIZED VIEW'
+                        WHEN 'p' THEN 'PARTITIONED TABLE'
+                        WHEN 'f' THEN 'FOREIGN TABLE'
+                        ELSE 'OTHER'
+                    END AS tableType,
+                    COALESCE(obj_description(c.oid, 'pg_class'), '') AS tableComment
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
+                  AND c.relkind IN ('r','p','v','m','f')
+                                ORDER BY name;";
+        
+
+        var rows = (await connection.QueryAsync(sql)).ToArray();
+        var tableInfos = new List<object>();
+        
+        foreach (var r in rows)
+        {
+            string name = string.Empty;
+            string schemaName = string.Empty;
+            string tableName = string.Empty;
+            string tableType = "BASE TABLE";
+            string tableComment = string.Empty;
+            long tableOid = 0;
+            
+            if (r is IDictionary<string, object> d)
+            {
+                if (d.TryGetValue("name", out var n)) name = n?.ToString() ?? string.Empty;
+                if (d.TryGetValue("schemaname", out var sn)) schemaName = sn?.ToString() ?? string.Empty;
+                if (d.TryGetValue("tablename", out var tn)) tableName = tn?.ToString() ?? string.Empty;
+                if (d.TryGetValue("tabletype", out var tt)) tableType = tt?.ToString() ?? "BASE TABLE";
+                if (d.TryGetValue("tablecomment", out var tc)) tableComment = tc?.ToString() ?? string.Empty;
+                if (d.TryGetValue("tableoid", out var oid)) tableOid = Convert.ToInt64(oid);
+            }
+            else
+            {
+                try
+                {
+                    dynamic dr = r;
+                    name = dr?.name?.ToString() ?? string.Empty;
+                    schemaName = dr?.schemaName?.ToString() ?? string.Empty;
+                    tableName = dr?.tableName?.ToString() ?? string.Empty;
+                    tableType = dr?.tableType?.ToString() ?? "BASE TABLE";
+                    tableComment = dr?.tableComment?.ToString() ?? string.Empty;
+                    tableOid = (long)(dr?.tableOid ?? 0);
+                }
+                catch
+                {
+                    // 跳过无法解析的行
+                }
+            }
+            
+            // 获取表的创建 SQL
+            var createSql = await GetTableCreateSql(connection, schemaName, tableName, tableOid, tableType);
+            
+            tableInfos.Add(new
+            {
+                name,
+                schema = schemaName,
+                table = tableName,
+                type = tableType,
+                comment = tableComment,
+                createSql
+            });
+        }
+
+        return ToonSerializer.Serialize(tableInfos);
+    }
+
+    private async Task<string> GetTableCreateSql(IDbConnection connection, string schemaName, string tableName, long oid, string tableType)
+    {
+        try
+        {
+            // 对于视图,获取视图定义
+            if (tableType == "VIEW" || tableType == "MATERIALIZED VIEW")
+            {
+                var viewDef = await connection.QueryFirstOrDefaultAsync<string>(@"
+                    SELECT pg_get_viewdef(@oid, true)", new { oid });
+                
+                if (!string.IsNullOrEmpty(viewDef))
+                {
+                    var viewType = tableType == "MATERIALIZED VIEW" ? "MATERIALIZED VIEW" : "VIEW";
+                    return $"CREATE {viewType} {schemaName}.{tableName} AS\n{viewDef}";
+                }
+            }
+            
+            // 对于普通表,构造 CREATE TABLE 语句
+            var columns = await connection.QueryAsync(@"
+                SELECT
+                    a.attname AS name,
+                    format_type(a.atttypid, a.atttypmod) AS type,
+                    a.attnotnull AS notnull,
+                    pg_get_expr(ad.adbin, ad.adrelid) AS defaultValue,
+                    col_description(c.oid, a.attnum) AS description
+                FROM pg_class c
+                JOIN pg_attribute a ON a.attrelid = c.oid
+                LEFT JOIN pg_attrdef ad ON ad.adrelid = a.attrelid AND ad.adnum = a.attnum
+                WHERE c.oid = @oid
+                  AND a.attnum > 0
+                  AND NOT a.attisdropped
+                ORDER BY a.attnum", new { oid });
+
+            var columnDefs = new List<string>();
+            foreach (var col in columns)
+            {
+                var colName = GetDynamicValue(col, "name")?.ToString();
+                var colType = GetDynamicValue(col, "type")?.ToString();
+                var notNull = GetDynamicValue(col, "notnull");
+                var defaultValue = GetDynamicValue(col, "defaultvalue")?.ToString();
+                
+                if (string.IsNullOrEmpty(colName) || string.IsNullOrEmpty(colType))
+                    continue;
+                
+                var colDef = $"  {colName} {colType}";
+                
+                if (!string.IsNullOrEmpty(defaultValue))
+                    colDef += $" DEFAULT {defaultValue}";
+                
+                if (notNull != null && Convert.ToBoolean(notNull))
+                    colDef += " NOT NULL";
+                
+                columnDefs.Add(colDef);
+            }
+            
+            // 获取主键
+            var pkColumns = await connection.QueryAsync<string>(@"
+                SELECT a.attname
+                FROM pg_index i
+                JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+                WHERE i.indrelid = @oid
+                  AND i.indisprimary
+                ORDER BY array_position(i.indkey, a.attnum)", new { oid });
+            
+            var pkList = pkColumns.ToList();
+            if (pkList.Any())
+            {
+                columnDefs.Add($"  PRIMARY KEY ({string.Join(", ", pkList)})");
+            }
+            
+            if (!columnDefs.Any())
+                return string.Empty;
+            
+            return $"CREATE TABLE {schemaName}.{tableName} (\n{string.Join(",\n", columnDefs)}\n);";
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+    
+    private object? GetDynamicValue(dynamic obj, string key)
+    {
+        try
+        {
+            if (obj is IDictionary<string, object> dict)
+            {
+                return dict.TryGetValue(key, out var value) ? value : null;
+            }
+            return ((IDictionary<string, object>)obj)[key];
+        }
+        catch
+        {
+            return null;
+        }
+    }
 }

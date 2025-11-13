@@ -53,7 +53,7 @@ public class SQLiteDatabaseService(SQLAgentOptions options) : IDatabaseService
 
         var rows = (await connection.QueryAsync(sql, dp)).ToArray();
         var tableInfos = new List<object>();
-        
+
         foreach (var r in rows)
         {
             if (r is IDictionary<string, object> d)
@@ -61,7 +61,7 @@ public class SQLiteDatabaseService(SQLAgentOptions options) : IDatabaseService
                 d.TryGetValue("name", out var tableName);
                 d.TryGetValue("sql", out var createSql);
                 d.TryGetValue("type", out var tableType);
-                
+
                 tableInfos.Add(new
                 {
                     name = tableName?.ToString() ?? string.Empty,
@@ -162,5 +162,52 @@ public class SQLiteDatabaseService(SQLAgentOptions options) : IDatabaseService
              {stringBuilder}
              </system-remind>
              """;
+    }
+
+    public async Task<string> GetAllTableNamesAsync()
+    {
+        using var connection = GetConnection();
+
+        var sql = @"SELECT name, sql, type
+                        FROM sqlite_master
+                        WHERE type='table' AND name NOT LIKE 'sqlite_%'";
+
+        var rows = (await connection.QueryAsync(sql)).ToArray();
+        var tableInfos = new List<object>();
+
+        foreach (var r in rows)
+        {
+            if (r is IDictionary<string, object> d)
+            {
+                d.TryGetValue("name", out var tableName);
+                d.TryGetValue("sql", out var createSql);
+                d.TryGetValue("type", out var tableType);
+
+                tableInfos.Add(new
+                {
+                    name = tableName?.ToString() ?? string.Empty,
+                    createSql = createSql?.ToString() ?? string.Empty,
+                    type = tableType?.ToString() ?? "table"
+                });
+            }
+            else
+            {
+                try
+                {
+                    tableInfos.Add(new
+                    {
+                        name = r?.name?.ToString() ?? string.Empty,
+                        createSql = r?.sql?.ToString() ?? string.Empty,
+                        type = r?.type?.ToString() ?? "table"
+                    });
+                }
+                catch
+                {
+                    // 跳过无法解析的行
+                }
+            }
+        }
+
+        return ToonSerializer.Serialize(tableInfos);
     }
 }

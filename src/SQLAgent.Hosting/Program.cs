@@ -54,7 +54,7 @@ builder.Services.AddSingleton<IAIProviderManager>(sp => new InMemoryAIProviderMa
 builder.Services.AddScoped<ConnectionService>();
 builder.Services.AddScoped<ProvidersService>();
 builder.Services.AddScoped<ChatService>();
-builder.Services.AddScoped<VectorIndexService>();
+builder.Services.AddScoped<ConnectionAgentService>();
 
 var systemSettings = builder.Configuration.GetSection("SystemSettings").Get<SystemSettings>() ?? new SystemSettings();
 

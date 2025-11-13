@@ -2,6 +2,7 @@ import { Moon, Sun } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useThemeStore } from '@/stores/themeStore';
 import { AIProviderSelector } from '@/components/providers/AIProviderSelector';
+import { ConnectionSelector } from '@/components/connections/ConnectionSelector';
 
 export function Header() {
   const { theme, toggleTheme } = useThemeStore();
@@ -12,6 +13,8 @@ export function Header() {
         <div className="flex items-center gap-3">
           {/* AI 提供商选择器 */}
           <AIProviderSelector />
+          {/* 数据库连接选择器 */}
+          <ConnectionSelector />
         </div>
 
         <div className="flex items-center gap-3">

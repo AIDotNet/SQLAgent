@@ -193,4 +193,23 @@ public sealed class InMemoryDatabaseConnectionManager : IDatabaseConnectionManag
         var exists = _connections.ContainsKey(connectionId);
         return Task.FromResult(exists);
     }
+
+    /// <inheritdoc />
+    public async Task UpdateAgentAsync(string connectionId, string agent, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(connectionId))
+        {
+            throw new ArgumentException("Connection ID cannot be empty", nameof(connectionId));
+        }
+
+        if (!_connections.TryGetValue(connectionId, out var existingConnection))
+        {
+            throw new InvalidOperationException($"Connection with ID '{connectionId}' does not exist");
+        }
+
+        // 更新 Agent 属性
+        existingConnection.Agent = agent;
+        
+        await PersistAsync(cancellationToken);
+    }
 }

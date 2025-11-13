@@ -78,7 +78,7 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
 
         var rows = (await connection.QueryAsync(sql, dp)).ToArray();
         var tableInfos = new List<object>();
-        
+
         foreach (var r in rows)
         {
             if (r is IDictionary<string, object> d)
@@ -88,7 +88,7 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
                 d.TryGetValue("tableName", out var tableName);
                 d.TryGetValue("tableType", out var tableType);
                 d.TryGetValue("tableComment", out var tableComment);
-                
+
                 tableInfos.Add(new
                 {
                     name = name?.ToString() ?? string.Empty,
@@ -134,8 +134,8 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
             if (table.Contains('.'))
             {
                 var parts = table.Split('.', 2);
-                schema = parts[0].Trim('`','"');
-                name = parts[1].Trim('`','"');
+                schema = parts[0].Trim('`', '"');
+                name = parts[1].Trim('`', '"');
             }
             else
             {
@@ -147,9 +147,12 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
                         var db = await connection.QueryFirstOrDefaultAsync<string>("SELECT DATABASE();");
                         if (!string.IsNullOrWhiteSpace(db)) schema = db!;
                     }
-                    catch { }
+                    catch
+                    {
+                    }
                 }
-                name = table.Trim('`','"');
+
+                name = table.Trim('`', '"');
             }
 
             var tableInfo = await connection.QueryFirstOrDefaultAsync(@"
@@ -167,7 +170,9 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
             {
                 stringBuilder.AppendLine("table:" + $"{schema}.{name}");
                 stringBuilder.AppendLine("tableDescription:table not found");
-                stringBuilder.AppendLine("columns:" + JsonSerializer.Serialize(Array.Empty<object>(), SQLAgentJsonOptions.DefaultOptions));
+                stringBuilder.AppendLine("columns:" +
+                                         JsonSerializer.Serialize(Array.Empty<object>(),
+                                             SQLAgentJsonOptions.DefaultOptions));
                 stringBuilder.AppendLine();
                 continue;
             }
@@ -177,7 +182,8 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
                 {
                     if (tableInfo is IDictionary<string, object> d)
                     {
-                        if (d.TryGetValue("description", out var desc)) tableDescription = desc?.ToString() ?? string.Empty;
+                        if (d.TryGetValue("description", out var desc))
+                            tableDescription = desc?.ToString() ?? string.Empty;
                     }
                     else
                     {
@@ -248,7 +254,8 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
 
             stringBuilder.AppendLine("table:" + $"{schema}.{name}");
             stringBuilder.AppendLine("tableDescription:" + tableDescription);
-            stringBuilder.AppendLine("columns:" + JsonSerializer.Serialize(columns, SQLAgentJsonOptions.DefaultOptions));
+            stringBuilder.AppendLine("columns:" +
+                                     JsonSerializer.Serialize(columns, SQLAgentJsonOptions.DefaultOptions));
             stringBuilder.AppendLine();
         }
 
@@ -260,4 +267,117 @@ public class MySqlDatabaseService(SQLAgentOptions options) : IDatabaseService
              </system-remind>
              """;
     }
+
+    public async Task<string> GetAllTableNamesAsync()
+    {
+        using var connection = GetConnection();
+
+
+        var sql = @"
+                SELECT DISTINCT 
+                    t.TABLE_SCHEMA AS schemaName,
+                    t.TABLE_NAME AS tableName,
+                    CONCAT(t.TABLE_SCHEMA, '.', t.TABLE_NAME) AS name,
+                    t.TABLE_TYPE AS tableType,
+                    IFNULL(t.TABLE_COMMENT,'') AS tableComment
+                FROM INFORMATION_SCHEMA.TABLES t
+                WHERE t.TABLE_TYPE IN ('BASE TABLE','VIEW')
+                  AND t.TABLE_SCHEMA NOT IN ('information_schema','mysql','performance_schema','sys')
+                ORDER BY t.TABLE_SCHEMA, t.TABLE_NAME";
+
+        var rows = (await connection.QueryAsync(sql)).ToArray();
+        var tableInfos = new List<object>();
+
+        foreach (var r in rows)
+        {
+            string name = string.Empty;
+            string schemaName = string.Empty;
+            string tableName = string.Empty;
+            string tableType = "BASE TABLE";
+            string tableComment = string.Empty;
+            
+            if (r is IDictionary<string, object> d)
+            {
+                if (d.TryGetValue("name", out var n)) name = n?.ToString() ?? string.Empty;
+                if (d.TryGetValue("schemaName", out var sn)) schemaName = sn?.ToString() ?? string.Empty;
+                if (d.TryGetValue("tableName", out var tn)) tableName = tn?.ToString() ?? string.Empty;
+                if (d.TryGetValue("tableType", out var tt)) tableType = tt?.ToString() ?? "BASE TABLE";
+                if (d.TryGetValue("tableComment", out var tc)) tableComment = tc?.ToString() ?? string.Empty;
+            }
+            else
+            {
+                try
+                {
+                    dynamic dr = r;
+                    name = dr?.name?.ToString() ?? string.Empty;
+                    schemaName = dr?.schemaName?.ToString() ?? string.Empty;
+                    tableName = dr?.tableName?.ToString() ?? string.Empty;
+                    tableType = dr?.tableType?.ToString() ?? "BASE TABLE";
+                    tableComment = dr?.tableComment?.ToString() ?? string.Empty;
+                }
+                catch
+                {
+                    // 跳过无法解析的行
+                }
+            }
+            
+            // 获取表的创建 SQL (MySQL 有原生的 SHOW CREATE TABLE 命令)
+            var createSql = await GetTableCreateSql(connection, schemaName, tableName, tableType);
+
+            tableInfos.Add(new
+            {
+                name,
+                schema = schemaName,
+                table = tableName,
+                type = tableType,
+                comment = tableComment,
+                createSql
+            });
+        }
+
+        return ToonSerializer.Serialize(tableInfos);
+    }
+
+    private async Task<string> GetTableCreateSql(IDbConnection connection, string schemaName, string tableName, string tableType)
+    {
+        try
+        {
+            // MySQL 有原生的 SHOW CREATE TABLE/VIEW 命令
+            var commandType = tableType == "VIEW" ? "VIEW" : "TABLE";
+            var showCreate = await connection.QueryFirstOrDefaultAsync(
+                $"SHOW CREATE {commandType} `{schemaName}`.`{tableName}`");
+
+            if (showCreate != null)
+            {
+                // SHOW CREATE TABLE 返回两列: Table 和 Create Table
+                // SHOW CREATE VIEW 返回多列,其中包含 Create View
+                if (showCreate is IDictionary<string, object> dict)
+                {
+                    // 尝试获取 Create Table 或 Create View
+                    if (dict.TryGetValue("Create Table", out var createTable))
+                        return createTable?.ToString() ?? string.Empty;
+                    if (dict.TryGetValue("Create View", out var createView))
+                        return createView?.ToString() ?? string.Empty;
+                }
+                else
+                {
+                    try
+                    {
+                        dynamic d = showCreate;
+                        // 动态访问可能的字段名
+                        return (d?.CreateTable ?? d?.CreateView ?? d?.Create_Table ?? d?.Create_View)?.ToString() ?? string.Empty;
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+        
+        return string.Empty;
+    }
+
 }

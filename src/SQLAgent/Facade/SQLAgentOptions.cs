@@ -53,6 +53,11 @@ public class SQLAgentOptions
     /// 数据库连接字符串
     /// </summary>
     public string ConnectionString { get; set; }
+    
+    /// <summary>
+    /// 数据库连接 Id
+    /// </summary>
+    public string ConnectionId { get; set; }
 
     /// <summary>
     /// SQL 类型

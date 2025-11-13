@@ -10,7 +10,7 @@ public class SQLAgentBuilder(IServiceCollection service)
 {
     private readonly SQLAgentOptions _options = new();
 
-    public void Build()
+    public void Build(IDatabaseConnectionManager databaseConnectionManager)
     {
         if (string.IsNullOrEmpty(_options.Model) ||
             string.IsNullOrEmpty(_options.APIKey) ||
@@ -74,7 +74,7 @@ public class SQLAgentBuilder(IServiceCollection service)
             var options = provider.GetRequiredService<SQLAgentOptions>();
             var databaseService = provider.GetRequiredService<IDatabaseService>();
             var logger = provider.GetRequiredService<ILogger<SQLAgentClient>>();
-            return new SQLAgentClient(options, databaseService, logger);
+            return new SQLAgentClient(options, databaseService, logger, databaseConnectionManager);
         });
 
         switch (_options.SqlType)
@@ -88,10 +88,11 @@ public class SQLAgentBuilder(IServiceCollection service)
         }
     }
 
-    public SQLAgentBuilder WithDatabaseType(SqlType sqlType, string connectionString)
+    public SQLAgentBuilder WithDatabaseType(SqlType sqlType, string connectionString, string connectionId)
     {
         _options.ConnectionString = connectionString;
         _options.SqlType = sqlType;
+        _options.ConnectionId = connectionId;
         return this;
     }
 
@@ -119,12 +120,15 @@ public class SQLAgentBuilder(IServiceCollection service)
     /// <param name="apiKey">API key for authentication</param>
     /// <param name="endpoint">API endpoint URL</param>
     /// <param name="aiProvider">AI provider type (e.g., OpenAI, AzureOpenAI, CustomOpenAI)</param>
-    public SQLAgentBuilder WithLLMProvider(string model, string apiKey, string endpoint, AIProviderType aiProvider)
+    /// <param name="maxOutputTokens">AI response max output tokens</param>
+    public SQLAgentBuilder WithLLMProvider(string model, string apiKey, string endpoint, AIProviderType aiProvider,
+        int maxOutputTokens = 3200)
     {
         _options.Model = model;
         _options.APIKey = apiKey;
         _options.Endpoint = endpoint;
         _options.AIProvider = aiProvider;
+        _options.MaxOutputTokens = maxOutputTokens;
 
         return this;
     }

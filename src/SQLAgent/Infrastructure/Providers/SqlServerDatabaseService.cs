@@ -84,7 +84,7 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
 
         var rows = (await connection.QueryAsync(sql, dp)).ToArray();
         var tableInfos = new List<object>();
-        
+
         foreach (var r in rows)
         {
             if (r is IDictionary<string, object> d)
@@ -94,7 +94,7 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
                 d.TryGetValue("tableName", out var tableName);
                 d.TryGetValue("tableType", out var tableType);
                 d.TryGetValue("tableComment", out var tableComment);
-                
+
                 tableInfos.Add(new
                 {
                     name = name?.ToString() ?? string.Empty,
@@ -139,12 +139,12 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
             if (table.Contains('.'))
             {
                 var parts = table.Split('.', 2);
-                schema = parts[0].Trim('[',']','"');
-                name = parts[1].Trim('[',']','"');
+                schema = parts[0].Trim('[', ']', '"');
+                name = parts[1].Trim('[', ']', '"');
             }
             else
             {
-                name = table.Trim('[',']','"');
+                name = table.Trim('[', ']', '"');
             }
 
             var obj = await connection.QueryFirstOrDefaultAsync(@"
@@ -167,7 +167,9 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
             {
                 stringBuilder.AppendLine("table:" + $"{schema}.{name}");
                 stringBuilder.AppendLine("tableDescription:table not found");
-                stringBuilder.AppendLine("columns:" + JsonSerializer.Serialize(Array.Empty<object>(), SQLAgentJsonOptions.DefaultOptions));
+                stringBuilder.AppendLine("columns:" +
+                                         JsonSerializer.Serialize(Array.Empty<object>(),
+                                             SQLAgentJsonOptions.DefaultOptions));
                 stringBuilder.AppendLine();
                 continue;
             }
@@ -178,7 +180,8 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
                     if (obj is IDictionary<string, object> d)
                     {
                         if (d.TryGetValue("object_id", out var oid) && oid != null) objectId = Convert.ToInt32(oid);
-                        if (d.TryGetValue("description", out var desc)) tableDescription = desc?.ToString() ?? string.Empty;
+                        if (d.TryGetValue("description", out var desc))
+                            tableDescription = desc?.ToString() ?? string.Empty;
                     }
                     else
                     {
@@ -268,7 +271,8 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
 
             stringBuilder.AppendLine("table:" + $"{schema}.{name}");
             stringBuilder.AppendLine("tableDescription:" + tableDescription);
-            stringBuilder.AppendLine("columns:" + JsonSerializer.Serialize(columns, SQLAgentJsonOptions.DefaultOptions));
+            stringBuilder.AppendLine("columns:" +
+                                     JsonSerializer.Serialize(columns, SQLAgentJsonOptions.DefaultOptions));
             stringBuilder.AppendLine();
         }
 
@@ -279,5 +283,194 @@ public class SqlServerDatabaseService(SQLAgentOptions options) : IDatabaseServic
              {stringBuilder}
              </system-remind>
              """;
+    }
+
+    public async Task<string> GetAllTableNamesAsync()
+    {
+        using var connection = GetConnection();
+
+        var sql = @"SELECT DISTINCT
+                       s.name AS schemaName,
+                       o.name AS tableName,
+                       o.object_id AS objectId,
+                       s.name + '.' + o.name AS name,
+                       CASE o.type WHEN 'U' THEN 'BASE TABLE' WHEN 'V' THEN 'VIEW' ELSE 'OTHER' END AS tableType,
+                       ISNULL(CAST(ep.value AS NVARCHAR(MAX)), '') AS tableComment
+                FROM sys.objects AS o
+                JOIN sys.schemas AS s ON s.schema_id = o.schema_id
+                LEFT JOIN sys.extended_properties ep
+                    ON ep.class = 1 AND ep.major_id = o.object_id AND ep.minor_id = 0 AND ep.name = 'MS_Description'
+                WHERE o.type IN ('U','V')
+                  AND s.name NOT IN ('sys','INFORMATION_SCHEMA')
+                ORDER BY s.name, o.name;";
+
+        var rows = (await connection.QueryAsync(sql)).ToArray();
+        var tableInfos = new List<object>();
+
+        foreach (var r in rows)
+        {
+            string name = string.Empty;
+            string schemaName = string.Empty;
+            string tableName = string.Empty;
+            string tableType = "BASE TABLE";
+            string tableComment = string.Empty;
+            int objectId = 0;
+            
+            if (r is IDictionary<string, object> d)
+            {
+                if (d.TryGetValue("name", out var n)) name = n?.ToString() ?? string.Empty;
+                if (d.TryGetValue("schemaName", out var sn)) schemaName = sn?.ToString() ?? string.Empty;
+                if (d.TryGetValue("tableName", out var tn)) tableName = tn?.ToString() ?? string.Empty;
+                if (d.TryGetValue("tableType", out var tt)) tableType = tt?.ToString() ?? "BASE TABLE";
+                if (d.TryGetValue("tableComment", out var tc)) tableComment = tc?.ToString() ?? string.Empty;
+                if (d.TryGetValue("objectId", out var oid)) objectId = Convert.ToInt32(oid);
+            }
+            else
+            {
+                try
+                {
+                    dynamic dr = r;
+                    name = dr?.name?.ToString() ?? string.Empty;
+                    schemaName = dr?.schemaName?.ToString() ?? string.Empty;
+                    tableName = dr?.tableName?.ToString() ?? string.Empty;
+                    tableType = dr?.tableType?.ToString() ?? "BASE TABLE";
+                    tableComment = dr?.tableComment?.ToString() ?? string.Empty;
+                    objectId = (int)(dr?.objectId ?? 0);
+                }
+                catch
+                {
+                    // 跳过无法解析的行
+                }
+            }
+            
+            // 获取表的创建 SQL
+            var createSql = await GetTableCreateSql(connection, schemaName, tableName, objectId, tableType);
+
+            tableInfos.Add(new
+            {
+                name,
+                schema = schemaName,
+                table = tableName,
+                type = tableType,
+                comment = tableComment,
+                createSql
+            });
+        }
+
+        return ToonSerializer.Serialize(tableInfos);
+    }
+
+    private async Task<string> GetTableCreateSql(IDbConnection connection, string schemaName, string tableName, int objectId, string tableType)
+    {
+        try
+        {
+            // 对于视图,获取视图定义
+            if (tableType == "VIEW")
+            {
+                var viewDef = await connection.QueryFirstOrDefaultAsync<string>(
+                    "SELECT OBJECT_DEFINITION(@objectId)", new { objectId });
+                
+                if (!string.IsNullOrEmpty(viewDef))
+                {
+                    return $"CREATE VIEW [{schemaName}].[{tableName}] AS\n{viewDef}";
+                }
+            }
+            
+            // 对于普通表,构造 CREATE TABLE 语句
+            var columns = await connection.QueryAsync(@"
+                SELECT
+                    c.name AS name,
+                    CASE
+                        WHEN t.name IN ('varchar','nvarchar','char','nchar','varbinary','binary')
+                            THEN t.name + '(' + CASE WHEN c.max_length = -1 THEN 'max' ELSE
+                                CAST(CASE WHEN t.name IN ('nchar','nvarchar') THEN c.max_length/2 ELSE c.max_length END AS VARCHAR(10)) END + ')'
+                        WHEN t.name IN ('decimal','numeric')
+                            THEN t.name + '(' + CAST(c.precision AS VARCHAR(10)) + ',' + CAST(c.scale AS VARCHAR(10)) + ')'
+                        ELSE t.name
+                    END AS [type],
+                    c.is_nullable AS nullable,
+                    OBJECT_DEFINITION(c.default_object_id) AS defaultValue,
+                    c.is_identity AS isIdentity,
+                    IDENT_SEED(OBJECT_NAME(c.object_id)) AS identitySeed,
+                    IDENT_INCR(OBJECT_NAME(c.object_id)) AS identityIncrement
+                FROM sys.columns c
+                JOIN sys.types t ON t.user_type_id = c.user_type_id
+                WHERE c.object_id = @objectId
+                ORDER BY c.column_id", new { objectId });
+
+            var columnDefs = new List<string>();
+            foreach (var col in columns)
+            {
+                var colName = GetDynamicValue(col, "name")?.ToString();
+                var colType = GetDynamicValue(col, "type")?.ToString();
+                var nullable = GetDynamicValue(col, "nullable");
+                var defaultValue = GetDynamicValue(col, "defaultValue")?.ToString();
+                var isIdentity = GetDynamicValue(col, "isIdentity");
+                
+                if (string.IsNullOrEmpty(colName) || string.IsNullOrEmpty(colType))
+                    continue;
+                
+                var colDef = $"  [{colName}] {colType}";
+                
+                // IDENTITY 列
+                if (isIdentity != null && Convert.ToBoolean(isIdentity))
+                {
+                    var seed = GetDynamicValue(col, "identitySeed");
+                    var incr = GetDynamicValue(col, "identityIncrement");
+                    colDef += $" IDENTITY({seed ?? 1},{incr ?? 1})";
+                }
+                
+                // NOT NULL
+                if (nullable != null && !Convert.ToBoolean(nullable))
+                    colDef += " NOT NULL";
+                
+                // DEFAULT
+                if (!string.IsNullOrEmpty(defaultValue))
+                    colDef += $" DEFAULT {defaultValue}";
+                
+                columnDefs.Add(colDef);
+            }
+            
+            // 获取主键
+            var pkColumns = await connection.QueryAsync<string>(@"
+                SELECT c.name
+                FROM sys.indexes i
+                JOIN sys.index_columns ic ON ic.object_id = i.object_id AND ic.index_id = i.index_id
+                JOIN sys.columns c ON c.object_id = ic.object_id AND c.column_id = ic.column_id
+                WHERE i.object_id = @objectId
+                  AND i.is_primary_key = 1
+                ORDER BY ic.key_ordinal", new { objectId });
+            
+            var pkList = pkColumns.ToList();
+            if (pkList.Any())
+            {
+                columnDefs.Add($"  PRIMARY KEY ({string.Join(", ", pkList.Select(pk => $"[{pk}]"))})");
+            }
+            
+            if (!columnDefs.Any())
+                return string.Empty;
+            
+            return $"CREATE TABLE [{schemaName}].[{tableName}] (\n{string.Join(",\n", columnDefs)}\n);";
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+    
+    private object? GetDynamicValue(dynamic obj, string key)
+    {
+        try
+        {
+            if (obj is IDictionary<string, object> dict)
+            {
+                return dict.TryGetValue(key, out var value) ? value : null;
+            }
+            return ((IDictionary<string, object>)obj)[key];
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

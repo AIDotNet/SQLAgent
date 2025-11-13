@@ -78,4 +78,9 @@ public sealed class DatabaseConnection
     /// Additional metadata for the connection
     /// </summary>
     public IReadOnlyDictionary<string, object?>? Metadata { get; init; }
+    
+    /// <summary>
+    /// 代理信息,包含数据库表信息
+    /// </summary>
+    public string? Agent { get; set; }
 }

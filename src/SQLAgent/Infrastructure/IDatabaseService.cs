@@ -30,8 +30,6 @@ public interface IDatabaseService
     {
         using var connection = GetConnection();
 
-        connection.Open();
-
         var paramDict = new DynamicParameters();
         foreach (var param in parameters)
         {
@@ -57,4 +55,10 @@ public interface IDatabaseService
     /// <param name="tableNames"></param>
     /// <returns></returns>
     Task<string> GetTableSchema(string[] tableNames);
+    
+    /// <summary>
+    /// 获取表和表的结构信息
+    /// </summary>
+    /// <returns></returns>
+    Task<string> GetAllTableNamesAsync();
 }

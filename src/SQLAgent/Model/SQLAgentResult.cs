@@ -15,7 +15,7 @@ public class SQLAgentResult
 
     public List<SqlBoxParameter> Parameters { get; set; } = new();
 
-    public Dictionary<string, string>? Columns { get; set; } = null;
+    public string[]? Columns { get; set; } = null;
     
     public object[] Result { get; set; } = [];
 

@@ -30,14 +30,15 @@ public class SqlTool(SQLAgentClient sqlAgentClient)
         string? errorMessage,
         [Description("Indicate the type of SQL currently being executed.")]
         SqlBoxExecuteType executeType,
-        [Description("Columns involved in the SQL statement, if any")]
-        Dictionary<string, string>? columns = null,
+        [Description(
+            "Mapping of SQL column names to their display names; key is the actual column name in the database, value is the human‑readable name for visualization.")]
+        string[]? columns = null,
         [Description("Parameters for the SQL statement, if any")]
         SqlBoxParameter[]? parameters = null)
     {
         // 验证：Query 和 EChart 类型必须提供 columns
         if (executeType is SqlBoxExecuteType.Query or SqlBoxExecuteType.EChart
-            && (columns == null || columns.Count == 0))
+            && (columns == null || columns.Length == 0))
         {
             return """
                    <system-error>

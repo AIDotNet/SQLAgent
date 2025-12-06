@@ -1,5 +1,6 @@
 ﻿using System.ClientModel;
 using System.Diagnostics;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
@@ -84,8 +85,8 @@ public class SQLAgentClient
 
         var messages = new List<ChatMessage>
         {
-            new(ChatRole.User, new List<AIContent>()
-            {
+            new(ChatRole.User,
+            [
                 new TextContent("""
                                 Please analyze the complete database schema and generate a comprehensive knowledge base document optimized for AI SQL query generation.
 
@@ -97,13 +98,13 @@ public class SQLAgentClient
                                 5. Apply database-specific SQL syntax correctly
 
                                 Focus on actionable, structured information over narrative descriptions.
-                                
+
                                 IMPORTANT: You MUST complete the task by calling the `Write` tool - DO NOT just output text directly.
                                 """),
                 new TextContent($"""
                                  <system-reminder>
                                  # Database Environment
-                                 - **Database Type**: {_options.SqlType.ToString()}
+                                 - **Database Type**: {_options.SqlType}
                                  - **Task**: Generate AI-consumable database knowledge base
 
                                  # Workflow Instructions (MANDATORY - Follow All Steps)
@@ -112,8 +113,8 @@ public class SQLAgentClient
                                  3. **Identify Patterns**: Identify common query patterns, JOIN relationships, and columns suitable for filtering, aggregation, and visualization.
                                  4. **Generate Documentation**: Generate the comprehensive and structured Markdown documentation following the prescribed format.
                                  5. **Write Output (REQUIRED)**: You MUST call the `Write` tool with the complete knowledge base content. This is a mandatory final step - do not skip it under any circumstances.
-                                 
-                                 ⚠️ CRITICAL: Your response is INCOMPLETE without calling the `Write` tool. Simply outputting text is NOT acceptable.
+
+                                 CRITICAL: Your response is INCOMPLETE without calling the `Write` tool. Simply outputting text is NOT acceptable.
 
                                  # Critical Requirements
                                  - Include concrete SQL examples for common query scenarios
@@ -138,7 +139,7 @@ public class SQLAgentClient
                                  {await DatabaseService.GetAllTableNamesAsync()}
                                  </database-schema-data>
                                  """)
-            })
+            ])
         };
 
         var thread = agent.GetNewThread();
@@ -173,15 +174,14 @@ public class SQLAgentClient
             new ChatMessage(ChatRole.User, new List<AIContent>()
             {
                 new TextContent($"""
-                                 # User Query
                                  {input.Query}
                                  """),
                 new TextContent($"""
-                                 <database-info>
                                  The following is comprehensive, pre-analyzed database schema information for your reference.
                                  This information has been validated and contains table structures, relationships, and usage patterns.
                                  ALWAYS prioritize information from this section before considering tool calls.
 
+                                 <database-info>
                                  {agent.Agent}
                                  </database-info>
                                  """),
@@ -189,12 +189,80 @@ public class SQLAgentClient
                                  <user-env>
                                  - Database Type: {_options.SqlType}
                                  - Write Permissions: {(_options.AllowWrite ? "ENABLED - You can perform INSERT, UPDATE, DELETE, CREATE, DROP operations (with confirmation)" : "DISABLED - Only SELECT queries are allowed")}
-                                 - Vector Search: {(_useVectorDatabaseIndex ? "ENABLED" : "DISABLED")}
+                                 {GetSqlPrompt(_options.SqlType)}
 
-                                 CRITICAL REQUIREMENTS:
-                                 1. When calling sql-Write with executeType=Query or executeType=EChart, you MUST provide the 'columns' parameter listing all SELECT columns
-                                 2. Always use parameterized queries with '@' prefixed parameter names
-                                 3. For EChart queries, follow DATA SELECTION RULES to exclude unnecessary ID fields
+                                 # CRITICAL REQUIREMENTS
+
+                                 ## 1. Column Parameter (MANDATORY)
+                                 When calling sql-Write with executeType=Query or executeType=EChart, you MUST provide the 'columns' parameter listing all SELECT columns.
+
+                                 ## 2. Parameterized Queries (MANDATORY)
+                                 Always use parameterized queries with '@' prefixed parameter names (e.g., @year, @category, @userId).
+
+                                 ## 3. EChart Query Optimization (CRITICAL FOR VISUALIZATION)
+                                 When executeType=EChart, generate SQL that ONLY selects visualization-essential columns.
+
+                                 ### MUST INCLUDE in EChart queries:
+                                 - **Dimension columns** (1-2 for X-axis/grouping): category, date, region, status, product_name, month, year
+                                 - **Measure columns** (1-3 for Y-axis/values): Aggregated values like COUNT(*), SUM(amount), AVG(price), MAX(quantity), MIN(cost)
+                                 - **Use meaningful aliases**: SUM(amount) AS total_sales, COUNT(*) AS order_count, AVG(price) AS average_price
+
+                                 ### MUST EXCLUDE from EChart queries (unless explicitly requested):
+                                 - **ID columns**: id, user_id, order_id, product_id, customer_id, employee_id
+                                 - **Foreign key columns**: Any column ending with _id
+                                 - **Timestamps** (unless for time-series): created_at, updated_at, deleted_at
+                                 - **Internal metadata**: version, hash, token, internal_notes
+                                 - **Redundant columns**: Columns that don't contribute to visualization
+
+                                 ### Column Count Guidelines:
+                                 - **Minimum**: 2 columns (1 dimension + 1 measure)
+                                 - **Optimal**: 2-3 columns (1 dimension + 1-2 measures)
+                                 - **Maximum**: 5 columns (2 dimensions + 3 measures)
+
+                                 ### GOOD EChart SQL Examples:
+                                 ```sql
+                                 -- Example 1: Category sales (1 dimension + 1 measure)
+                                 SELECT category, SUM(amount) AS total_sales
+                                 FROM orders
+                                 GROUP BY category
+                                 ORDER BY total_sales DESC
+
+                                 -- Example 2: Monthly trend (1 time dimension + 1 measure)
+                                 SELECT strftime('%Y-%m', order_date) AS month, COUNT(*) AS order_count
+                                 FROM orders
+                                 WHERE order_date >= date('now', '-12 months')
+                                 GROUP BY month
+                                 ORDER BY month
+
+                                 -- Example 3: Multi-measure comparison (1 dimension + 2 measures)
+                                 SELECT region, SUM(revenue) AS total_revenue, COUNT(DISTINCT customer_id) AS customer_count
+                                 FROM sales
+                                 GROUP BY region
+                                 ORDER BY total_revenue DESC
+                                 LIMIT 10
+                                 ```
+
+                                 ### BAD EChart SQL Examples (AVOID):
+                                 ```sql
+                                 -- BAD: Includes unnecessary ID columns
+                                 SELECT id, user_id, category, SUM(amount) AS total
+                                 FROM orders
+                                 GROUP BY id, user_id, category
+
+                                 -- BAD: Too many columns (not suitable for chart)
+                                 SELECT id, name, email, phone, address, city, country, created_at
+                                 FROM users
+
+                                 -- BAD: No aggregation for visualization
+                                 SELECT category, amount
+                                 FROM orders
+                                 ```
+
+                                 ### Decision Rule:
+                                 - IF user asks for "chart", "graph", "visualization", "trend", "distribution" → Use executeType=EChart + Apply strict column selection
+                                 - IF user asks for "list", "details", "export", "all data" → Use executeType=Query + Select all relevant columns
+
+                                 ENFORCEMENT: Before calling sql-Write with executeType=EChart, verify your SELECT clause contains ONLY visualization-essential columns (no IDs, no redundant fields).
                                  </user-env>
                                  """),
                 new TextContent(PromptConstants.SQLGeneratorSystemRemindPrompt)
@@ -212,22 +280,42 @@ public class SQLAgentClient
                 {
                     AIFunctionFactory.Create(_sqlResult.SearchTables, new AIFunctionFactoryOptions()
                     {
-                        Name = "SearchTables"
+                        Name = "SearchTables",
+                        SerializerOptions = JsonSerializerOptions.Web
                     }),
                     AIFunctionFactory.Create(_sqlResult.Write, new AIFunctionFactoryOptions()
                     {
-                        Name = "Write"
+                        Name = "Write",
+                        SerializerOptions = JsonSerializerOptions.Web
                     })
                 },
-                ToolMode = new AutoChatToolMode(),
-                MaxOutputTokens = _options.MaxOutputTokens,
-                Temperature = 0.2f
+                ToolMode = ChatToolMode.Auto,
+                MaxOutputTokens = _options.MaxOutputTokens
             },
         });
 
         var thread = agents.GetNewThread();
 
-        await agents.RunAsync(messages, thread);
+        await foreach (var item in agents.RunStreamingAsync(messages, thread))
+        {
+            if (item.RawRepresentation is ChatResponseUpdate
+                {
+                    RawRepresentation: StreamingChatCompletionUpdate completion
+                } &&
+                completion.ToolCallUpdates.Count > 0)
+            {
+                var tools = completion.ToolCallUpdates;
+
+                var str = Encoding.UTF8.GetString(tools.FirstOrDefault()?.FunctionArgumentsUpdate);
+
+                Console.Write(str);
+            }
+
+            if (!string.IsNullOrWhiteSpace(item.Text))
+            {
+                Console.Write(item.Text);
+            }
+        }
 
         _logger.LogInformation("AI model call completed, processing {Count} SQL results",
             _sqlResult.SqlBoxResult.Count);
@@ -237,21 +325,52 @@ public class SQLAgentClient
             _logger.LogInformation("Processing SQL result: executeType={executeType}, SQL={Sql}", sqlTool.ExecuteType,
                 sqlTool.Sql);
 
+            // 如果是 EChart 类型，记录列信息以便诊断
+            if (sqlTool.ExecuteType == SqlBoxExecuteType.EChart)
+            {
+                var columns = sqlTool.Columns ?? Array.Empty<string>();
+                _logger.LogInformation(
+                    "EChart SQL Columns (count={Count}): {Columns}",
+                    columns.Length,
+                    string.Join(", ", columns));
+
+                // 检查是否包含 ID 列
+                var idColumns = columns.Where(c => IsIdColumn(c)).ToList();
+                if (idColumns.Any())
+                {
+                    _logger.LogWarning(
+                        "WARNING: EChart SQL contains ID columns: {IdColumns}. This may result in poor visualization. Consider regenerating SQL without these columns.",
+                        string.Join(", ", idColumns));
+                }
+
+                // 检查列数量
+                if (columns.Length > 5)
+                {
+                    _logger.LogWarning(
+                        "WARNING: EChart SQL has {Count} columns (recommended: 2-5). Chart may be overcrowded.",
+                        columns.Length);
+                }
+                else if (columns.Length < 2)
+                {
+                    _logger.LogWarning(
+                        "WARNING: EChart SQL has only {Count} column(s). Need at least 2 columns for visualization.",
+                        columns.Length);
+                }
+            }
+
             switch (sqlTool.ExecuteType)
             {
                 // 判断SQL是否是查询
                 case SqlBoxExecuteType.EChart:
-                    {
-                        var echartsTool = new EchartsTool();
-                        var value = await ExecuteSqliteQueryAsync(sqlTool);
+                {
+                    var echartsTool = new EchartsTool();
+                    var value = await ExecuteSqliteQueryAsync(sqlTool);
 
-                        var echartMessages = new List<ChatMessage>();
-                        var echartsHistory = new ChatHistory();
-                        echartsHistory.AddSystemMessage(PromptConstants.SQLGeneratorEchartsDataPrompt);
+                    var echartMessages = new List<ChatMessage>();
 
-                        bool? any = sqlTool.Parameters.Count != 0;
+                    bool? any = sqlTool.Parameters.Count != 0;
 
-                        var userMessageText = $$"""
+                    var userMessageText = $$"""
                                             Generate an ECharts option configuration for the following SQL query results.
 
                                             # User's Original Query
@@ -264,8 +383,8 @@ public class SQLAgentClient
 
                                             # Query Parameters
                                             {{(any == true
-                                                    ? string.Join("\n", sqlTool.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
-                                                    : "No parameters")}}
+                                                ? string.Join("\n", sqlTool.Parameters.Select(p => $"- {p.Name}: {p.Value}"))
+                                                : "No parameters")}}
 
                                             # Data Structure Analysis
                                             The query returns the following result set that needs visualization.
@@ -324,7 +443,7 @@ public class SQLAgentClient
                                             Return ONLY the JSON option object, no additional text.
                                             """;
 
-                        echartMessages.Add(new ChatMessage(ChatRole.User, new List<AIContent>()
+                    echartMessages.Add(new ChatMessage(ChatRole.User, new List<AIContent>()
                     {
                         new TextContent(userMessageText),
                         new TextContent(
@@ -332,42 +451,60 @@ public class SQLAgentClient
                             <system-remind>
                             This is a reminder. Your job is merely to assist users in generating ECharts options. If the task has nothing to do with ECharts, please respond politely with a rejection.
                             - Always generate complete and valid ECharts option JSON.
-                            - Use the `{DATA_PLACEHOLDER}` format for data injection points.
-                            - It is necessary to use `echarts-Write` to store the generated ECharts options.
+                            - Please use {DATA_PLACEHOLDER_Y} and {DATA_PLACEHOLDER_X} as variables to insert data for the user.
+                            - It is necessary to use `echarts-Write` to store the generated ECharts options.Using string insertion
                             </system-remind>
                             """)
                     }));
 
-                        _logger.LogInformation("Generating ECharts option for SQL query");
+                    _logger.LogInformation("Generating ECharts option for SQL query");
 
-                        var echartsThread = agents.GetNewThread();
-                        var result = await agents.RunAsync(messages, echartsThread);
-
-                        // 获取生成的 ECharts option 并注入实际数据
-                        if (!string.IsNullOrWhiteSpace(echartsTool.EchartsOption) && value is { Length: > 0 })
-                        {
-                            var processedOption = InjectDataIntoEchartsOption(echartsTool.EchartsOption, value);
-                            echartsTool.EchartsOption = processedOption;
-
-                            // 将 ECharts option 保存到结果对象中
-                            sqlTool.EchartsOption = processedOption;
-
-                            _logger.LogInformation("ECharts option generated and data injected successfully");
-                        }
-                        else
-                        {
-                            _logger.LogWarning("No ECharts option generated or no query results to inject");
-                        }
-
-                        break;
-                    }
-                case SqlBoxExecuteType.Query:
+                    agents = _chatClient.CreateAIAgent(new ChatClientAgentOptions()
                     {
-                        var value = await ExecuteSqliteQueryAsync(sqlTool);
+                        Instructions = PromptConstants.SQLGeneratorEchartsDataPrompt,
+                        ChatOptions = new ChatOptions()
+                        {
+                            Tools =
+                            [
+                                AIFunctionFactory.Create(echartsTool.Write, new AIFunctionFactoryOptions()
+                                {
+                                    Name = "Write",
+                                    SerializerOptions = JsonSerializerOptions.Web
+                                })
+                            ],
+                            ToolMode = ChatToolMode.Auto,
+                            MaxOutputTokens = _options.MaxOutputTokens
+                        },
+                    });
 
-                        sqlTool.Result = value;
-                        break;
+                    var echartsThread = agents.GetNewThread();
+                    var result = await agents.RunAsync(echartMessages, echartsThread);
+
+                    // 获取生成的 ECharts option 并注入实际数据
+                    if (!string.IsNullOrWhiteSpace(echartsTool.EchartsOption) && value is { Length: > 0 })
+                    {
+                        var processedOption = InjectDataIntoEchartsOption(echartsTool.EchartsOption, value);
+                        echartsTool.EchartsOption = processedOption;
+
+                        // 将 ECharts option 保存到结果对象中
+                        sqlTool.EchartsOption = processedOption;
+
+                        _logger.LogInformation("ECharts option generated and data injected successfully");
                     }
+                    else
+                    {
+                        _logger.LogWarning("No ECharts option generated or no query results to inject");
+                    }
+
+                    break;
+                }
+                case SqlBoxExecuteType.Query:
+                {
+                    var value = await ExecuteSqliteQueryAsync(sqlTool);
+
+                    sqlTool.Result = value;
+                    break;
+                }
                 default:
                     await ExecuteSqliteNonQueryAsync(sqlTool);
                     break;
@@ -378,6 +515,30 @@ public class SQLAgentClient
             _sqlResult.SqlBoxResult.Count);
 
         return _sqlResult.SqlBoxResult;
+    }
+
+    private string GetSqlPrompt(SqlType type)
+    {
+        switch (type)
+        {
+            case SqlType.PostgreSql:
+                return
+                    "Note that the generated schema of PostgreSQL requires case sensitivity. Therefore, both fields and tables need to be enclosed in double quotes, including: \"table\"";
+            case SqlType.MySql:
+                return
+                    "Note that in MySQL, identifiers are not case sensitive by default, but case sensitivity can depend on the underlying operating system. Use backticks (`) to enclose table and column names when they are reserved words or contain special characters.";
+            case SqlType.Sqlite:
+                return
+                    "Note that in SQLite, identifiers are case insensitive by default. Use double quotes to preserve case or include special characters in table and column names.";
+            case SqlType.Oracle:
+                return
+                    "Note that in Oracle, unquoted identifiers are converted to uppercase. Use double quotes to preserve the case of table and column names.";
+            case SqlType.SqlServer:
+                return
+                    "Note that in SQL Server, case sensitivity depends on the collation settings. Use square brackets [] to enclose table and column names to avoid conflicts with reserved words.";
+            default:
+                return "";
+        }
     }
 
     /// <summary>
@@ -485,36 +646,94 @@ public class SQLAgentClient
                 {
                     var keys = firstItem.Keys.ToArray();
 
-                    // 提取 X 轴数据 (通常是第一列)
-                    var xAxisData = queryResults.Select(row =>
+                    // 智能识别维度列和度量列
+                    var dimensionColumn = FindDimensionColumn(keys, firstItem);
+                    var measureColumn = FindMeasureColumn(keys, firstItem, dimensionColumn);
+
+                    _logger.LogInformation(
+                        "Smart column detection: Dimension={Dimension}, Measure={Measure}, Total columns={Total}",
+                        dimensionColumn ?? "none", measureColumn ?? "none", keys.Length);
+
+                    if (dimensionColumn != null && measureColumn != null)
                     {
-                        var dict = row as IDictionary<string, object>;
-                        return dict?[keys[0]];
-                    }).ToArray();
+                        // 提取 X 轴数据（维度列）
+                        var xAxisData = queryResults.Select(row =>
+                        {
+                            var dict = row as IDictionary<string, object>;
+                            return dict?[dimensionColumn];
+                        }).ToArray();
 
-                    var xAxisJson = JsonSerializer.Serialize(xAxisData, new JsonSerializerOptions
+                        var xAxisJson = JsonSerializer.Serialize(xAxisData, new JsonSerializerOptions
+                        {
+                            WriteIndented = false
+                        });
+
+                        // 提取 Y 轴数据（度量列）
+                        var yAxisData = queryResults.Select(row =>
+                        {
+                            var dict = row as IDictionary<string, object>;
+                            return dict?[measureColumn];
+                        }).ToArray();
+
+                        var yAxisJson = JsonSerializer.Serialize(yAxisData, new JsonSerializerOptions
+                        {
+                            WriteIndented = false
+                        });
+
+                        result = result.Replace("{{DATA_PLACEHOLDER_X}}", xAxisJson);
+                        result = result.Replace("{DATA_PLACEHOLDER_X}", xAxisJson);
+                        result = result.Replace("{{DATA_PLACEHOLDER_Y}}", yAxisJson);
+                        result = result.Replace("{DATA_PLACEHOLDER_Y}", yAxisJson);
+
+                        _logger.LogInformation(
+                            "Data injection completed: X-axis from '{DimensionColumn}', Y-axis from '{MeasureColumn}'",
+                            dimensionColumn, measureColumn);
+                    }
+                    else
                     {
-                        WriteIndented = false
-                    });
+                        // 回退到原始逻辑（跳过 ID 列）
+                        var nonIdKeys = keys.Where(k => !IsIdColumn(k)).ToArray();
 
-                    // 提取 Y 轴数据 (通常是第二列或后续列)
-                    var yAxisData = queryResults.Select(row =>
-                    {
-                        var dict = row as IDictionary<string, object>;
-                        return dict?[keys[1]];
-                    }).ToArray();
+                        if (nonIdKeys.Length >= 2)
+                        {
+                            var xAxisData = queryResults.Select(row =>
+                            {
+                                var dict = row as IDictionary<string, object>;
+                                return dict?[nonIdKeys[0]];
+                            }).ToArray();
 
-                    var yAxisJson = JsonSerializer.Serialize(yAxisData, new JsonSerializerOptions
-                    {
-                        WriteIndented = false
-                    });
+                            var yAxisData = queryResults.Select(row =>
+                            {
+                                var dict = row as IDictionary<string, object>;
+                                return dict?[nonIdKeys[1]];
+                            }).ToArray();
 
-                    result = result.Replace("{{DATA_PLACEHOLDER_X}}", xAxisJson);
-                    result = result.Replace("{DATA_PLACEHOLDER_X}", xAxisJson);
-                    result = result.Replace("{{DATA_PLACEHOLDER_Y}}", yAxisJson);
-                    result = result.Replace("{DATA_PLACEHOLDER_Y}", yAxisJson);
+                            var xAxisJson = JsonSerializer.Serialize(xAxisData, new JsonSerializerOptions
+                            {
+                                WriteIndented = false
+                            });
 
-                    _logger.LogInformation("Data injection completed for X and Y axes");
+                            var yAxisJson = JsonSerializer.Serialize(yAxisData, new JsonSerializerOptions
+                            {
+                                WriteIndented = false
+                            });
+
+                            result = result.Replace("{{DATA_PLACEHOLDER_X}}", xAxisJson);
+                            result = result.Replace("{DATA_PLACEHOLDER_X}", xAxisJson);
+                            result = result.Replace("{{DATA_PLACEHOLDER_Y}}", yAxisJson);
+                            result = result.Replace("{DATA_PLACEHOLDER_Y}", yAxisJson);
+
+                            _logger.LogInformation(
+                                "Data injection completed (fallback): Using first two non-ID columns: '{Col1}', '{Col2}'",
+                                nonIdKeys[0], nonIdKeys[1]);
+                        }
+                        else
+                        {
+                            _logger.LogWarning(
+                                "Could not identify suitable columns for visualization. Total columns: {Count}, Non-ID columns: {NonIdCount}",
+                                keys.Length, nonIdKeys.Length);
+                        }
+                    }
                 }
                 else
                 {
@@ -530,5 +749,113 @@ public class SQLAgentClient
             _logger.LogWarning(ex, "Data injection failed: {Message}", ex.Message);
             return optionTemplate;
         }
+    }
+
+    /// <summary>
+    /// 智能识别维度列（用于 X 轴）
+    /// 优先选择非 ID 的文本列，排除描述性字段
+    /// </summary>
+    private string? FindDimensionColumn(string[] keys, IDictionary<string, object> sampleRow)
+    {
+        // 排除的描述性字段（不适合作为维度）
+        var excludedDescriptiveFields = new[] { "description", "address", "notes", "comment", "remarks", "detail" };
+
+        // 第一轮：查找最佳维度列（非 ID、非描述、短文本）
+        foreach (var key in keys)
+        {
+            // 跳过 ID 列
+            if (IsIdColumn(key))
+                continue;
+
+            // 跳过描述性字段
+            if (excludedDescriptiveFields.Any(field =>
+                key.IndexOf(field, StringComparison.OrdinalIgnoreCase) >= 0))
+                continue;
+
+            var value = sampleRow[key];
+
+            // 优先选择短文本（类别、名称、类型等）
+            if (value is string strValue && strValue.Length < 100)
+                return key;
+        }
+
+        // 第二轮：查找任何非 ID 的文本列
+        foreach (var key in keys)
+        {
+            if (IsIdColumn(key))
+                continue;
+
+            var value = sampleRow[key];
+            if (value is string)
+                return key;
+        }
+
+        // 第三轮：返回第一个非 ID 列
+        return keys.FirstOrDefault(k => !IsIdColumn(k));
+    }
+
+    /// <summary>
+    /// 智能识别度量列（用于 Y 轴）
+    /// 优先选择数值类型的列，排除已选的维度列
+    /// </summary>
+    private string? FindMeasureColumn(string[] keys, IDictionary<string, object> sampleRow, string? excludeDimensionColumn)
+    {
+        // 第一轮：查找数值列（最理想的度量）
+        foreach (var key in keys)
+        {
+            // 跳过 ID 列
+            if (IsIdColumn(key))
+                continue;
+
+            // 跳过已选的维度列
+            if (key == excludeDimensionColumn)
+                continue;
+
+            var value = sampleRow[key];
+
+            // 查找数值类型（整数、浮点数）
+            if (value is int || value is long || value is decimal || value is double || value is float)
+                return key;
+        }
+
+        // 第二轮：如果没有数值列，查找非维度的其他列
+        foreach (var key in keys)
+        {
+            if (IsIdColumn(key))
+                continue;
+
+            if (key == excludeDimensionColumn)
+                continue;
+
+            return key;
+        }
+
+        // 如果只有两列且都不是 ID，返回第二列
+        var nonIdKeys = keys.Where(k => !IsIdColumn(k)).ToArray();
+        return nonIdKeys.Length >= 2 ? nonIdKeys[1] : null;
+    }
+
+    /// <summary>
+    /// 判断列名是否是 ID 类型
+    /// </summary>
+    private bool IsIdColumn(string columnName)
+    {
+        var lowerName = columnName.ToLower();
+
+        // 精确匹配
+        if (lowerName == "id" || lowerName == "uuid" || lowerName == "guid")
+            return true;
+
+        // 后缀匹配（如 user_id, order_id, customer_id）
+        if (lowerName.EndsWith("_id") || lowerName.EndsWith("id"))
+        {
+            // 但排除 "valid", "solid" 等非 ID 的词
+            if (lowerName.EndsWith("valid") || lowerName.EndsWith("solid") || lowerName.EndsWith("rapid"))
+                return false;
+
+            return true;
+        }
+
+        return false;
     }
 }
